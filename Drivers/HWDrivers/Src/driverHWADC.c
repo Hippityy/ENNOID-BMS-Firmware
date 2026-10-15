@@ -136,35 +136,3 @@ bool driverHWADCGetNTCValue(float *ntcValue, uint32_t ntcNominal, uint32_t ntcSe
 
 	return false;
 };
-
-static uint16_t driverHWADCReadChannelAveraged(uint32_t channel, uint8_t samples) {
-	uint32_t sum = 0;
-	if(samples == 0) samples = 1;
-	for(uint8_t i = 0; i < samples; i++) {
-		driverHWADCSetInputChannel(&hadc1, channel);
-		HAL_ADC_Start(&hadc1);
-		HAL_ADC_PollForConversion(&hadc1, 5);
-		sum += HAL_ADC_GetValue(&hadc1);
-	}
-	return (uint16_t)(sum / samples);
-}
-
-// Read pack current from a LEM DHAB sensor wired directly to the internal ADC.
-// Uses the fine range (CH1) for accuracy and, when enabled, falls back to the
-// coarse range (CH2) beyond DHAB_SWITCH_A. See driverHWADC.h for wiring/scaling notes.
-bool driverHWADCGetDHABCurrent(float *packCurrent) {
-	float vCh1 = driverHWADCReadChannelAveraged(DHAB_ADC_CHANNEL_CH1, NoOfAverages) * (DHAB_VREF_V / 4096.0f);
-	float iCh1 = (vCh1 - DHAB_ZERO_V) / DHAB_SENS_CH1_VperA;
-
-#if DHAB_ADC_CH2_ENABLED
-	float vCh2 = driverHWADCReadChannelAveraged(DHAB_ADC_CHANNEL_CH2, NoOfAverages) * (DHAB_VREF_V / 4096.0f);
-	float iCh2 = (vCh2 - DHAB_ZERO_V) / DHAB_SENS_CH2_VperA;
-	if(iCh1 > -DHAB_SWITCH_A && iCh1 < DHAB_SWITCH_A)
-		*packCurrent = iCh1;
-	else
-		*packCurrent = iCh2;
-#else
-	*packCurrent = iCh1;
-#endif
-	return true;
-}

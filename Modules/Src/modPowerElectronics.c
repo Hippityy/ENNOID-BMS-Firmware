@@ -1302,9 +1302,6 @@ float modPowerElectronicsCalcPackCurrent(void){
 		case sourcePackCurrentISL28022Dual:
 			returnCurrent = modPowerElectronicsPackStateHandle->loCurrentLoadCurrent;
 			break;
-		case sourcePackCurrentLEMDHAB:
-			driverHWADCGetDHABCurrent(&returnCurrent);								// External LEM DHAB sensor wired directly to STM32 internal ADC
-			break;
 		case sourcePackCurrentNone:
 		case sourcePackCurrentCANDieBieShunt:
 		case sourcePackCurrentCANIsaBellenHuette:

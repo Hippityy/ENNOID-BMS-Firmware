@@ -795,8 +795,7 @@ typedef enum {
 	sourcePackCurrentCANIsaBellenHuette = 3,
 	sourcePackCurrentCANVESC = 4,
 	sourcePackCurrentISL28022Dual = 5,
-	sourcePackCurrentLEMDHAB = 6,				// External LEM DHAB current sensor wired directly to the STM32 internal ADC
-	sourcePackCurrentINA226 = 7
+	sourcePackCurrentINA226 = 6
 } configPackCurrentDataSourceEnum;
 
 typedef enum {
