@@ -27,10 +27,14 @@
 #define ENNOID_SS_24					0
 #endif
 
+#ifndef ENNOID_HV_2
+#define ENNOID_HV_2					0
+#endif
+
 // Firmware version
-#define FW_VERSION_MAJOR				5
-#define FW_VERSION_MINOR				2
-#define FW_REAL_VERSION					"V5.2"
+#define FW_VERSION_MAJOR				6
+#define FW_VERSION_MINOR				6
+#define FW_REAL_VERSION					"V6.6"
 #define FW_TEST_VERSION_NUMBER				0
 // UUID
 #define STM32_UUID				((uint32_t*)0x1FFFF7AC)
@@ -69,6 +73,17 @@
 	#define HAS_ON_BOARD_NTC				1					
 	#define ISL28022_MASTER_ADDRES				0x40
 	#define HAS_DISCHARGE					1
+#endif
+
+#if ENNOID_HV_2
+  #define HW_NAME "ENNOID-HV-2"
+	#define HW_LIM_CELL_BALANCE_MAX_SIMULTANEOUS_DISCHARGE 18
+	#define HW_LIM_CELL_MONITOR_IC_COUNT                   18
+	#define HW_LIM_MIN_NOT_USED_DELAY                      5000
+	#define ISL28022_MASTER_ADDRES				0x45
+	#define HAS_DISCHARGE					1
+	#define HAS_HUMIDITY					1
+	#define HAS_CHARGER_VOLTAGE_MEASUREMENT			1
 	#define HAS_COMMON_CHARGE_DISCHARGE_OPTION		1
 #endif
 

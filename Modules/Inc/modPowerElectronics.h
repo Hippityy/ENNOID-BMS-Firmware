@@ -104,6 +104,12 @@ typedef struct {
 	float    tempBMSLow;
 	float    tempBMSAverage;
 	float 	 humidity;
+	float    AhCounter;
+	float    WhCounter;
+	float    AhCounterCharge;
+	float    WhCounterCharge;
+	float    AhCounterDischarge;
+	float    WhCounterDischarge;
 	uint8_t  preChargeDesired;
 	uint8_t  disChargeDesired;
 	uint8_t  disChargeLCAllowed;

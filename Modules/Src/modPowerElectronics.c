@@ -999,6 +999,11 @@ void modPowerElectronicsCellMonitorsArrayTranslate(void) {
 				modPowerElectronicsPackStateHandle->cellVoltagesIndividual[individualCellPointer].cellVoltage = modPowerElectronicsPackStateHandle->cellModuleVoltages[modulePointer][modulePointerCell];
 				modPowerElectronicsPackStateHandle->cellVoltagesIndividual[individualCellPointer].cellNumber = individualCellPointer++;
 			}
+		}else if(modulePointer == 0 && modPowerElectronicsGeneralConfigHandle->firstICNoCells > 0 && modPowerElectronicsGeneralConfigHandle->firstICNoCells != modPowerElectronicsGeneralConfigHandle->noOfCellsPerModule){
+			for(uint8_t modulePointerCell = 0; modulePointerCell < modPowerElectronicsGeneralConfigHandle->firstICNoCells; modulePointerCell++) {
+				modPowerElectronicsPackStateHandle->cellVoltagesIndividual[individualCellPointer].cellVoltage = modPowerElectronicsPackStateHandle->cellModuleVoltages[modulePointer][modulePointerCell];
+				modPowerElectronicsPackStateHandle->cellVoltagesIndividual[individualCellPointer].cellNumber = individualCellPointer++;
+			}
 		}else{ // use noOfCellsPerModule as usually
 			for(uint8_t modulePointerCell = 0; modulePointerCell < modPowerElectronicsGeneralConfigHandle->noOfCellsPerModule; modulePointerCell++) {
 				modPowerElectronicsPackStateHandle->cellVoltagesIndividual[individualCellPointer].cellVoltage = modPowerElectronicsPackStateHandle->cellModuleVoltages[modulePointer][modulePointerCell];
@@ -1294,7 +1299,11 @@ float modPowerElectronicsCalcPackCurrent(void){
 
 	switch(modPowerElectronicsGeneralConfigHandle->packCurrentDataSource){
 		case sourcePackCurrentISL28022:
+		case sourcePackCurrentISL28022Dual:
 			returnCurrent = modPowerElectronicsPackStateHandle->loCurrentLoadCurrent;
+			break;
+		case sourcePackCurrentLEMDHAB:
+			driverHWADCGetDHABCurrent(&returnCurrent);								// External LEM DHAB sensor wired directly to STM32 internal ADC
 			break;
 		case sourcePackCurrentNone:
 		case sourcePackCurrentCANDieBieShunt:

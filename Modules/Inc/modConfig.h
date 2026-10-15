@@ -127,6 +127,8 @@ typedef struct {
 	uint32_t	NTC25DegResistance[modConfigNoOfNTCTypes];                           // NTC resistance at 25 degree
 	uint16_t	NTCBetaFactor[modConfigNoOfNTCTypes];                                // NTC Beta factor
 	uint8_t		humidityICType;	
+	uint8_t		cellTypeUsed;
+	uint8_t		firstICNoCells;
 	uint8_t		BMSApplication;																													// Humidity sensor IC type
 } modConfigGeneralConfigStructTypedef;
 

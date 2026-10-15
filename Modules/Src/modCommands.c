@@ -136,6 +136,12 @@ void modCommandsProcessPacket(unsigned char *data, unsigned int len) {
 			libBufferAppend_uint8(modCommandsSendBuffer, (uint8_t)modCommandsGeneralState->operationalState,			&ind);
 			libBufferAppend_uint8(modCommandsSendBuffer, (uint8_t)modCommandsGeneralState->chargeBalanceActive,			&ind);
 			libBufferAppend_uint8(modCommandsSendBuffer, (uint8_t)modCommandsGeneralState->faultState,				&ind);
+			libBufferAppend_float32(modCommandsSendBuffer, modCommandsGeneralState->AhCounter,				1e3,		&ind);
+			libBufferAppend_float32(modCommandsSendBuffer, modCommandsGeneralState->WhCounter,				1e3,		&ind);
+			libBufferAppend_float32(modCommandsSendBuffer, modCommandsGeneralState->AhCounterCharge,		1e3,		&ind);
+			libBufferAppend_float32(modCommandsSendBuffer, modCommandsGeneralState->WhCounterCharge,		1e3,		&ind);
+			libBufferAppend_float32(modCommandsSendBuffer, modCommandsGeneralState->AhCounterDischarge,		1e3,		&ind);
+			libBufferAppend_float32(modCommandsSendBuffer, modCommandsGeneralState->WhCounterDischarge,		1e3,		&ind);
 		
 			modCommandsSendBuffer[ind++] = modCommandsGeneralConfig->CANID;
 			modCommandsSendPacket(modCommandsSendBuffer, ind);
@@ -276,6 +282,9 @@ void modCommandsProcessPacket(unsigned char *data, unsigned int len) {
 			modCommandsGeneralConfig->chargeEnableOperationalState			= libBufferGet_uint8(data,&ind);		// 1
 			modCommandsGeneralConfig->powerDownDelay				= libBufferGet_uint32(data,&ind);		// 4
 			modCommandsGeneralConfig->humidityICType				= libBufferGet_uint8(data,&ind);		// 1
+			modCommandsGeneralConfig->cellTypeUsed					= libBufferGet_uint8(data,&ind);		// 1
+			modCommandsGeneralConfig->firstICNoCells				= libBufferGet_uint8(data,&ind);		// 1
+			modCommandsGeneralConfig->lastICNoOfCells				= libBufferGet_uint8(data,&ind);		// 1
 			
 			ind = 0;
 			modCommandsSendBuffer[ind++] = packet_id;
@@ -390,6 +399,9 @@ void modCommandsProcessPacket(unsigned char *data, unsigned int len) {
 			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->chargeEnableOperationalState			,&ind); // 1	
 			libBufferAppend_uint32(       modCommandsSendBuffer,modCommandsToBeSendConfig->powerDownDelay					,&ind); // 4
 			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->humidityICType					,&ind); // 1
+			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->cellTypeUsed						,&ind); // 1
+			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->firstICNoCells					,&ind); // 1
+			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->lastICNoOfCells					,&ind); // 1
 			
 		  	modCommandsSendPacket(modCommandsSendBuffer, ind);
 			break;

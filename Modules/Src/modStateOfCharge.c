@@ -49,6 +49,19 @@ void modStateOfChargeProcess(void){
 	modStateOfChargeLargeCoulombTick = HAL_GetTick();
 	modStateOfChargeGeneralStateOfCharge.remainingCapacityAh += dt*modStateOfChargePackStatehandle->packCurrent/(3600*1000);// (miliseconds * amps)/(3600*1000) accumulatedCharge in AmpHour.
 	
+	// Track Ah & Wh counters
+	float deltaAh = ((float)dt * fabsf(modStateOfChargePackStatehandle->packCurrent)) / (3600.0f * 1000.0f);
+	float deltaWh = deltaAh * modStateOfChargePackStatehandle->packVoltage;
+	if (modStateOfChargePackStatehandle->packCurrent > 0.0f) {
+		modStateOfChargePackStatehandle->AhCounterCharge += deltaAh;
+		modStateOfChargePackStatehandle->WhCounterCharge += deltaWh;
+	} else if (modStateOfChargePackStatehandle->packCurrent < 0.0f) {
+		modStateOfChargePackStatehandle->AhCounterDischarge += deltaAh;
+		modStateOfChargePackStatehandle->WhCounterDischarge += deltaWh;
+	}
+	modStateOfChargePackStatehandle->AhCounter = modStateOfChargePackStatehandle->AhCounterDischarge - modStateOfChargePackStatehandle->AhCounterCharge;
+	modStateOfChargePackStatehandle->WhCounter = modStateOfChargePackStatehandle->WhCounterDischarge - modStateOfChargePackStatehandle->WhCounterCharge;
+	
 	// Cap the max stored energy to the configured battery capacity.
 	if(modStateOfChargeGeneralStateOfCharge.remainingCapacityAh > modStateOfChargeGeneralConfigHandle->batteryCapacity)
 		modStateOfChargeGeneralStateOfCharge.remainingCapacityAh = modStateOfChargeGeneralConfigHandle->batteryCapacity;

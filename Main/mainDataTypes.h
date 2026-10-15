@@ -790,11 +790,13 @@ typedef enum {
 
 typedef enum {
 	sourcePackCurrentNone = 0,
-	sourcePackCurrentISL28022,
-	sourcePackCurrentCANDieBieShunt,
-	sourcePackCurrentCANIsaBellenHuette,
-	sourcePackCurrentINA226,
-	sourcePackCurrentCANVESC
+	sourcePackCurrentISL28022 = 1,
+	sourcePackCurrentCANDieBieShunt = 2,
+	sourcePackCurrentCANIsaBellenHuette = 3,
+	sourcePackCurrentCANVESC = 4,
+	sourcePackCurrentISL28022Dual = 5,
+	sourcePackCurrentLEMDHAB = 6,				// External LEM DHAB current sensor wired directly to the STM32 internal ADC
+	sourcePackCurrentINA226 = 7
 } configPackCurrentDataSourceEnum;
 
 typedef enum {
