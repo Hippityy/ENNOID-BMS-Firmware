@@ -19,6 +19,7 @@
  */
 
 #include "modOperationalState.h"
+#include "driverSWStorageManager.h"
 
 OperationalStateTypedef modOperationalStateLastState;
 OperationalStateTypedef modOperationalStateCurrentState;
@@ -444,7 +445,7 @@ void modOperationalStateTask(void) {
 		modOperationalStateForceOn = true;
 		modPowerElectronicsAllowForcedOn(true);
 		modOperationalStateSetNewState(OP_STATE_PRE_CHARGE);
-		driverSWStorageManagerEraseData();
+		/* Force-on must not erase the pack's calibration and protection limits. */
 	};
 	
 	// Check for power button longpress -> if so power down BMS

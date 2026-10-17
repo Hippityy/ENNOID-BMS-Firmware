@@ -1,0 +1,5 @@
+Run `python3 tests/protocol/run.py [path/to/tool/res/config.xml]` from any directory.
+
+This compiles the actual production codec, configuration validator/defaults/converter, cell mapper, command policy and buffer serialization with ASan/UBSan. Only the unused EEPROM hardware dependency is stubbed; discarded sections do not need mocks. Leak detection is disabled because this environment runs under ptrace; tests allocate no production dynamic memory.
+
+The independent fixture captures all96 tool `SerOrder` fields and types (268bytes). Expected bytes use Python network-order serialization. C tests cover canonical round-trip bytes, sentinels, every truncated payload length, extra bytes, invalid topology/nonfinite values, unchanged configuration after rejected writes, command IDs240..247, recovery allowlist, and legacy layout conversion. Values originate from tool XML defaults, with explicit safe fixture overrides: `lastICNoOfCells=12` (canonical layout), `cellTypeUsed=0` (only implemented generic chemistry), `chargerCANProtocol=0` (ELCON unavailable). These fixture overrides do not change firmware presets or advertise unimplemented modes.

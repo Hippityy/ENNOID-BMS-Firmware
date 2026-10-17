@@ -1,0 +1,583 @@
+{
+  "source": "official Tool V6.06 res/config.xml",
+  "sha256": "e551f03c151a9824b5df3825d4710c4ebf129798fe03025712540f5f0c553af3",
+  "payload_bytes": 268,
+  "fields": [
+    {
+      "name": "noOfCellsSeries",
+      "member": "noOfCellsSeries",
+      "kind": "U8",
+      "width": 1
+    },
+    {
+      "name": "noOfParallelModules",
+      "member": "noOfParallelModules",
+      "kind": "U8",
+      "width": 1
+    },
+    {
+      "name": "batteryCapacity",
+      "member": "batteryCapacity",
+      "kind": "F32",
+      "width": 4
+    },
+    {
+      "name": "cellHardUnderVoltage",
+      "member": "cellHardUnderVoltage",
+      "kind": "F32",
+      "width": 4
+    },
+    {
+      "name": "cellHardOverVoltage",
+      "member": "cellHardOverVoltage",
+      "kind": "F32",
+      "width": 4
+    },
+    {
+      "name": "cellLCSoftUnderVoltage",
+      "member": "cellLCSoftUnderVoltage",
+      "kind": "F32",
+      "width": 4
+    },
+    {
+      "name": "cellSoftOverVoltage",
+      "member": "cellSoftOverVoltage",
+      "kind": "F32",
+      "width": 4
+    },
+    {
+      "name": "cellBalanceDifferenceThreshold",
+      "member": "cellBalanceDifferenceThreshold",
+      "kind": "F32",
+      "width": 4
+    },
+    {
+      "name": "cellBalanceStart",
+      "member": "cellBalanceStart",
+      "kind": "F32",
+      "width": 4
+    },
+    {
+      "name": "cellBalanceAllTime",
+      "member": "cellBalanceAllTime",
+      "kind": "BOOL",
+      "width": 1
+    },
+    {
+      "name": "cellThrottleUpperStart",
+      "member": "cellThrottleUpperStart",
+      "kind": "F32",
+      "width": 4
+    },
+    {
+      "name": "cellThrottleLowerStart",
+      "member": "cellThrottleLowerStart",
+      "kind": "F32",
+      "width": 4
+    },
+    {
+      "name": "cellThrottleUpperMargin",
+      "member": "cellThrottleUpperMargin",
+      "kind": "F32",
+      "width": 4
+    },
+    {
+      "name": "cellThrottleLowerMargin",
+      "member": "cellThrottleLowerMargin",
+      "kind": "F32",
+      "width": 4
+    },
+    {
+      "name": "packVoltageDataSource",
+      "member": "packVoltageDataSource",
+      "kind": "U8",
+      "width": 1
+    },
+    {
+      "name": "packCurrentDataSource",
+      "member": "packCurrentDataSource",
+      "kind": "U8",
+      "width": 1
+    },
+    {
+      "name": "buzzerSignalSource",
+      "member": "buzzerSignalSource",
+      "kind": "U8",
+      "width": 1
+    },
+    {
+      "name": "buzzerPersistent",
+      "member": "buzzerSignalPersistant",
+      "kind": "BOOL",
+      "width": 1
+    },
+    {
+      "name": "shuntLCFactor",
+      "member": "shuntLCFactor",
+      "kind": "F32",
+      "width": 4
+    },
+    {
+      "name": "voltageLCFactor",
+      "member": "voltageLCFactor",
+      "kind": "F32",
+      "width": 4
+    },
+    {
+      "name": "voltageLCOffset",
+      "member": "voltageLCOffset",
+      "kind": "I16",
+      "width": 2
+    },
+    {
+      "name": "loadVoltageFactor",
+      "member": "loadVoltageFactor",
+      "kind": "F32",
+      "width": 4
+    },
+    {
+      "name": "loadVoltageOffset",
+      "member": "loadVoltageOffset",
+      "kind": "F32",
+      "width": 4
+    },
+    {
+      "name": "chargerVoltageFactor",
+      "member": "chargerVoltageFactor",
+      "kind": "F32",
+      "width": 4
+    },
+    {
+      "name": "chargerVoltageOffset",
+      "member": "chargerVoltageOffset",
+      "kind": "F32",
+      "width": 4
+    },
+    {
+      "name": "throttleChargeIncreaseRate",
+      "member": "throttleChargeIncreaseRate",
+      "kind": "U8",
+      "width": 1
+    },
+    {
+      "name": "throttleDisChargeIncreaseRate",
+      "member": "throttleDisChargeIncreaseRate",
+      "kind": "U8",
+      "width": 1
+    },
+    {
+      "name": "cellBalanceUpdateInterval",
+      "member": "cellBalanceUpdateInterval",
+      "kind": "U32",
+      "width": 4
+    },
+    {
+      "name": "maxSimultaneousDischargingCells",
+      "member": "maxSimultaneousDischargingCells",
+      "kind": "U8",
+      "width": 1
+    },
+    {
+      "name": "timeoutDischargeRetry",
+      "member": "timeoutDischargeRetry",
+      "kind": "U32",
+      "width": 4
+    },
+    {
+      "name": "hysteresisDischarge",
+      "member": "hysteresisDischarge",
+      "kind": "F32",
+      "width": 4
+    },
+    {
+      "name": "timeoutChargeRetry",
+      "member": "timeoutChargeRetry",
+      "kind": "U32",
+      "width": 4
+    },
+    {
+      "name": "hysteresisCharge",
+      "member": "hysteresisCharge",
+      "kind": "F32",
+      "width": 4
+    },
+    {
+      "name": "timeoutChargeCompleted",
+      "member": "timeoutChargeCompleted",
+      "kind": "U32",
+      "width": 4
+    },
+    {
+      "name": "timeoutChargingCompletedMinimalMismatch",
+      "member": "timeoutChargingCompletedMinimalMismatch",
+      "kind": "U32",
+      "width": 4
+    },
+    {
+      "name": "maxMismatchThreshold",
+      "member": "maxMismatchThreshold",
+      "kind": "F32",
+      "width": 4
+    },
+    {
+      "name": "chargerEnabledThreshold",
+      "member": "chargerEnabledThreshold",
+      "kind": "F32",
+      "width": 4
+    },
+    {
+      "name": "timeoutChargerDisconnected",
+      "member": "timeoutChargerDisconnected",
+      "kind": "U32",
+      "width": 4
+    },
+    {
+      "name": "minimalPrechargePercentage",
+      "member": "minimalPrechargePercentage",
+      "kind": "F32",
+      "width": 4
+    },
+    {
+      "name": "timeoutLCPreCharge",
+      "member": "timeoutLCPreCharge",
+      "kind": "U32",
+      "width": 4
+    },
+    {
+      "name": "maxAllowedCurrent",
+      "member": "maxAllowedCurrent",
+      "kind": "F32",
+      "width": 4
+    },
+    {
+      "name": "maxAllowedChargeCurrent",
+      "member": "maxAllowedChargeCurrent",
+      "kind": "F32",
+      "width": 4
+    },
+    {
+      "name": "allowedTempBattDischargingMax",
+      "member": "allowedTempBattDischargingMax",
+      "kind": "F32",
+      "width": 4
+    },
+    {
+      "name": "allowedTempBattDischargingMin",
+      "member": "allowedTempBattDischargingMin",
+      "kind": "F32",
+      "width": 4
+    },
+    {
+      "name": "allowedTempBattChargingMax",
+      "member": "allowedTempBattChargingMax",
+      "kind": "F32",
+      "width": 4
+    },
+    {
+      "name": "allowedTempBattChargingMin",
+      "member": "allowedTempBattChargingMin",
+      "kind": "F32",
+      "width": 4
+    },
+    {
+      "name": "allowedTempBattCoolingMax",
+      "member": "allowedTempBattCoolingMax",
+      "kind": "F32",
+      "width": 4
+    },
+    {
+      "name": "allowedTempBattCoolingMin",
+      "member": "allowedTempBattCoolingMin",
+      "kind": "F32",
+      "width": 4
+    },
+    {
+      "name": "allowedTempBMSMax",
+      "member": "allowedTempBMSMax",
+      "kind": "F32",
+      "width": 4
+    },
+    {
+      "name": "allowedTempBMSMin",
+      "member": "allowedTempBMSMin",
+      "kind": "F32",
+      "width": 4
+    },
+    {
+      "name": "displayTimeoutBatteryDead",
+      "member": "displayTimeoutBatteryDead",
+      "kind": "U32",
+      "width": 4
+    },
+    {
+      "name": "displayTimeoutBatteryError",
+      "member": "displayTimeoutBatteryError",
+      "kind": "U32",
+      "width": 4
+    },
+    {
+      "name": "displayTimeoutBatteryErrorPreCharge",
+      "member": "displayTimeoutBatteryErrorPreCharge",
+      "kind": "U32",
+      "width": 4
+    },
+    {
+      "name": "displayTimeoutSplashScreen",
+      "member": "displayTimeoutSplashScreen",
+      "kind": "U32",
+      "width": 4
+    },
+    {
+      "name": "displayStyle",
+      "member": "displayStyle",
+      "kind": "U8",
+      "width": 1
+    },
+    {
+      "name": "maxUnderAndOverVoltageErrorCount",
+      "member": "maxUnderAndOverVoltageErrorCount",
+      "kind": "U8",
+      "width": 1
+    },
+    {
+      "name": "maxUnderAndOverTemperatureErrorCount",
+      "member": "maxUnderAndOverTemperatureErrorCount",
+      "kind": "U8",
+      "width": 1
+    },
+    {
+      "name": "notUsedCurrentThreshold",
+      "member": "notUsedCurrentThreshold",
+      "kind": "F32",
+      "width": 4
+    },
+    {
+      "name": "notUsedTimeout",
+      "member": "notUsedTimeout",
+      "kind": "U32",
+      "width": 4
+    },
+    {
+      "name": "stateOfChargeStoreInterval",
+      "member": "stateOfChargeStoreInterval",
+      "kind": "U32",
+      "width": 4
+    },
+    {
+      "name": "CANID",
+      "member": "CANID",
+      "kind": "U8",
+      "width": 1
+    },
+    {
+      "name": "CANIDStyle",
+      "member": "CANIDStyle",
+      "kind": "U8",
+      "width": 1
+    },
+    {
+      "name": "CANBaudRate",
+      "member": "canBusSpeed",
+      "kind": "U8",
+      "width": 1
+    },
+    {
+      "name": "loadCANProtocol",
+      "member": "loadCANProtocol",
+      "kind": "U8",
+      "width": 1
+    },
+    {
+      "name": "chargerCANProtocol",
+      "member": "chargerCANProtocol",
+      "kind": "U8",
+      "width": 1
+    },
+    {
+      "name": "tempEnableMaskBMS",
+      "member": "tempEnableMaskBMS",
+      "kind": "U32",
+      "width": 4
+    },
+    {
+      "name": "tempEnableMaskBattery",
+      "member": "tempEnableMaskBattery",
+      "kind": "U32",
+      "width": 4
+    },
+    {
+      "name": "tempEnableMaskExpansion",
+      "member": "tempEnableMaskExpansion",
+      "kind": "U32",
+      "width": 4
+    },
+    {
+      "name": "noOfTempSensorPerModule",
+      "member": "noOfTempSensorPerModule",
+      "kind": "U8",
+      "width": 1
+    },
+    {
+      "name": "noOfExpansionBoard",
+      "member": "noOfExpansionBoard",
+      "kind": "U8",
+      "width": 1
+    },
+    {
+      "name": "noOfTempSensorPerExpansionBoard",
+      "member": "noOfTempSensorPerExpansionBoard",
+      "kind": "U8",
+      "width": 1
+    },
+    {
+      "name": "LCUseDischarge",
+      "member": "LCUseDischarge",
+      "kind": "U8",
+      "width": 1
+    },
+    {
+      "name": "LCUsePrecharge",
+      "member": "LCUsePrecharge",
+      "kind": "U8",
+      "width": 1
+    },
+    {
+      "name": "allowChargingDuringDischarge",
+      "member": "allowChargingDuringDischarge",
+      "kind": "BOOL",
+      "width": 1
+    },
+    {
+      "name": "allowForceOn",
+      "member": "allowForceOn",
+      "kind": "BOOL",
+      "width": 1
+    },
+    {
+      "name": "pulseToggleButton",
+      "member": "pulseToggleButton",
+      "kind": "U8",
+      "width": 1
+    },
+    {
+      "name": "useCANSafetyInput",
+      "member": "useCANSafetyInput",
+      "kind": "BOOL",
+      "width": 1
+    },
+    {
+      "name": "useCANDelayedPowerDown",
+      "member": "useCANDelayedPowerDown",
+      "kind": "BOOL",
+      "width": 1
+    },
+    {
+      "name": "NTCLTCTopResistor",
+      "member": "NTCTopResistor[modConfigNTCGroupLTCExt]",
+      "kind": "U32",
+      "width": 4
+    },
+    {
+      "name": "NTCLTC25Deg",
+      "member": "NTC25DegResistance[modConfigNTCGroupLTCExt]",
+      "kind": "U32",
+      "width": 4
+    },
+    {
+      "name": "NTCLTCBeta",
+      "member": "NTCBetaFactor[modConfigNTCGroupLTCExt]",
+      "kind": "U16",
+      "width": 2
+    },
+    {
+      "name": "NTCPCBTopResistor",
+      "member": "NTCTopResistor[modConfigNTCGroupMasterPCB]",
+      "kind": "U32",
+      "width": 4
+    },
+    {
+      "name": "NTCPCB25Deg",
+      "member": "NTC25DegResistance[modConfigNTCGroupMasterPCB]",
+      "kind": "U32",
+      "width": 4
+    },
+    {
+      "name": "NTCPCBBeta",
+      "member": "NTCBetaFactor[modConfigNTCGroupMasterPCB]",
+      "kind": "U16",
+      "width": 2
+    },
+    {
+      "name": "NTCEXPTopResistor",
+      "member": "NTCTopResistor[modConfigNTCGroupExp]",
+      "kind": "U32",
+      "width": 4
+    },
+    {
+      "name": "NTCEXP25Deg",
+      "member": "NTC25DegResistance[modConfigNTCGroupExp]",
+      "kind": "U32",
+      "width": 4
+    },
+    {
+      "name": "NTCEXPBeta",
+      "member": "NTCBetaFactor[modConfigNTCGroupExp]",
+      "kind": "U16",
+      "width": 2
+    },
+    {
+      "name": "cellMonitorICType",
+      "member": "cellMonitorType",
+      "kind": "U8",
+      "width": 1
+    },
+    {
+      "name": "cellMonitorICCount",
+      "member": "cellMonitorICCount",
+      "kind": "U8",
+      "width": 1
+    },
+    {
+      "name": "extEnableState",
+      "member": "externalEnableOperationalState",
+      "kind": "U8",
+      "width": 1
+    },
+    {
+      "name": "chargeEnableState",
+      "member": "chargeEnableOperationalState",
+      "kind": "U8",
+      "width": 1
+    },
+    {
+      "name": "powerDownDelay",
+      "member": "powerDownDelay",
+      "kind": "U32",
+      "width": 4
+    },
+    {
+      "name": "humidityICType",
+      "member": "humidityICType",
+      "kind": "U8",
+      "width": 1
+    },
+    {
+      "name": "cellTypeUsed",
+      "member": "cellTypeUsed",
+      "kind": "U8",
+      "width": 1
+    },
+    {
+      "name": "firstICNoCells",
+      "member": "firstICNoCells",
+      "kind": "U8",
+      "width": 1
+    },
+    {
+      "name": "lastICNoOfCells",
+      "member": "lastICNoOfCells",
+      "kind": "U8",
+      "width": 1
+    }
+  ]
+}

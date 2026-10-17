@@ -38,14 +38,14 @@
 
 // Settings
 #define CAN_STATUS_MSG_INT_MS			1
-#define RX_CAN_FRAMES_SIZE	    		255       // max 255
+#define RX_CAN_FRAMES_SIZE 128 /* Bounded ISR queue; leaves RAM for TX and stack. */
 #define RX_CAN_BUFFER_SIZE	    		PACKET_MAX_PL_LEN
 
 // Settings
 #define CAN_STATUS_MSGS_TO_STORE		10
 #define CAN_BMS_STATUS_MSGS_TO_STORE		185
 
-void		modCANInit(modPowerElectronicsPackStateTypedef *packState, modConfigGeneralConfigStructTypedef *generalConfigPointer);
+bool modCANInit(modPowerElectronicsPackStateTypedef *packState, modConfigGeneralConfigStructTypedef *generalConfigPointer);
 void		modCANTask(void);
 uint32_t	modCANGetDestinationID(CanRxMsgTypeDef canMsg);
 CAN_PACKET_ID	modCANGetPacketID(CanRxMsgTypeDef canMsg);
@@ -53,6 +53,9 @@ uint32_t	modCANGetCANID(uint32_t destinationID, CAN_PACKET_ID packetID);
 void		modCANSendStatusFast(void);
 void		modCANSendStatusSlow(void);
 void		modCANSendStatusVESC(void);
+void modCANSendHeartbeatVESC(void);
+void modCANPrintDiagnostics(void);
+void modCANCommissioningTask(void);
 void		modCANSubTaskHandleCommunication(void);
 void		modCANTransmitExtID(uint32_t id, uint8_t *data, uint8_t len);
 void		modCANTransmitStandardID(uint32_t id, uint8_t *data, uint8_t len);
@@ -64,11 +67,9 @@ void		modCANSetESCRPM(uint8_t controllerID, float rpm);
 void		modCANSetESCPosition(uint8_t controllerID, float pos);
 void		modCANSetESCCurrentRelative(uint8_t controllerID, float currentRel);
 void		modCANSetESCBrakeCurrentRelative(uint8_t controllerID, float currentRel);
-static void	modCANSendPacketWrapper(unsigned char *data, unsigned int len);
 void		modCANHandleKeepAliveSafetyMessage(CanRxMsgTypeDef canMsg);
 void		modCANHandleCANOpenMessage(CanRxMsgTypeDef canMsg);
 void		modCANHandleSubTaskCharger(void);
-void		modCANRXWatchDog(void);
 void		modCANOpenChargerCheckPresent(void);
 void		modCANOpenBMSSendHeartBeat(void);
 void		modCANOpenChargerStartNode(void);

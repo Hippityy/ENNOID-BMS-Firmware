@@ -24,7 +24,6 @@
 #include "stdint.h"
 #include "stdbool.h"
 #include "mainDataTypes.h"
-#include "driverSWStorageManager.h"
 #include "generalDefines.h"
 
 #define modConfigNoOfNTCTypes      5
@@ -130,14 +129,25 @@ typedef struct {
 	uint8_t		cellTypeUsed;
 	uint8_t		firstICNoCells;
 	uint8_t		BMSApplication;																													// Humidity sensor IC type
+	// V6.05+ wire semantics; appended to keep legacy member offsets stable.
+	float maxAllowedChargeCurrent;
+	uint8_t loadCANProtocol;
+	uint8_t chargerCANProtocol;
 } modConfigGeneralConfigStructTypedef;
 
 modConfigGeneralConfigStructTypedef* modConfigInit(void);
 bool modConfigStoreAndLoadDefaultConfig(void);
 bool modConfigStoreConfig(void);
+bool modConfigStoreCandidate(const modConfigGeneralConfigStructTypedef *candidate);
 bool modConfigLoadConfig(void);
 bool modConfigStoreDefaultConfig(void);
 void modConfigLoadDefaultConfig(modConfigGeneralConfigStructTypedef *configLocation);
-void modconfigHardwareLimitsApply(modConfigGeneralConfigStructTypedef *configLocation);
+bool modconfigHardwareLimitsApply(modConfigGeneralConfigStructTypedef *configLocation);
+
+bool modConfigValidate(modConfigGeneralConfigStructTypedef *config);
+void modConfigPublish(modConfigGeneralConfigStructTypedef *dest,
+                      const modConfigGeneralConfigStructTypedef *src);
+void modConfigSyncLegacyCAN(modConfigGeneralConfigStructTypedef *config);
+bool modConfigMigrateLegacy(void *dest, const uint8_t *raw, uint16_t rawBytes);
 
 #endif

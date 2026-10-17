@@ -20,6 +20,7 @@
  */
 
 #include "modTerminal.h"
+#include "driverSWStorageManager.h"
 
 // Private types
 typedef struct _terminal_callback_struct {
@@ -56,6 +57,20 @@ void modTerminalProcessString(char *str) {
 
 	if (strcmp(argv[0], "ping") == 0) {
 		modCommandsPrintf("pong\n");
+	} else if (strcmp(argv[0], "can_status") == 0) {
+        modCANPrintDiagnostics();
+	} else if (strcmp(argv[0], "storage_status") == 0) {
+        modCommandsPrintf("Storage status=%u ready=%u; blank/invalid data requires explicit configuration and reboot",
+                          driverSWStorageManagerGetStatus(), driverSWStorageManagerIsReady());
+    } else if (strcmp(argv[0], "storage_migrate312") == 0 || strcmp(argv[0], "storage_migrate316") == 0) {
+        /* Only the latched UART commissioning loop may choose a known old schema. */
+        if (!modCommandsIsCommissioningMode()) {
+            modCommandsPrintf("Migration requires commissioning mode with outputs disabled");
+        } else {
+            unsigned bytes = strcmp(argv[0], "storage_migrate312") == 0 ? 312 : 316;
+            bool ok = driverSWStorageManagerMigrateLegacy(bytes);
+            modCommandsPrintf(ok ? "Migration committed; reboot required" : "Migration rejected; verify source layout and storage status");
+        }
 	} else if (strcmp(argv[0], "status") == 0) {
 		bool disChargeEnabled = packState.disChargeDesired && packState.disChargeLCAllowed;
 		bool chargeEnabled = packState.chargeDesired && packState.chargeAllowed;
@@ -169,6 +184,7 @@ void modTerminalProcessString(char *str) {
 		modCommandsPrintf(" ");
 		
 	} else if (strcmp(argv[0], "config_read") == 0) {
+        modCommandsSetCommissioningMode(true);
 		modCommandsPrintf("---    Reading config    ---");
 		if(modConfigLoadConfig())
 			modCommandsPrintf("Succesfully read config.");
@@ -184,6 +200,7 @@ void modTerminalProcessString(char *str) {
 			if(newNumberOfCells < 13 && newNumberOfCells > 2) {
 				modCommandsPrintf("Number of cells is set to: %u.",newNumberOfCells);
 				generalConfig->noOfCellsSeries = newNumberOfCells;
+                modCommandsSetCommissioningMode(true);
 			} else {
 				modCommandsPrintf("Invalid number of cells (should be anything from 3 to 12).");
 			}

@@ -292,11 +292,13 @@ uint16_t driverHWEEPROMEraseFlash(void) {
   */
 uint16_t driverHWEEPROMVerifyPageFullyErased(uint32_t Address)
 {
+  if (Address != PAGE0_BASE_ADDRESS && Address != PAGE1_BASE_ADDRESS) return 0;
+  const uint32_t pageEnd = Address + PAGE_SIZE - 1;
   uint32_t readstatus = 1;
   uint16_t addressvalue = 0x5555;
     
   /* Check each active page address starting from end */
-  while (Address <= PAGE0_END_ADDRESS)
+  while (Address < pageEnd)
   {
     /* Get the current location content to be compared with virtual address */
     addressvalue = (*(__IO uint16_t*)Address);
@@ -311,7 +313,7 @@ uint16_t driverHWEEPROMVerifyPageFullyErased(uint32_t Address)
       break;
     }
     /* Next address location */
-    Address = Address + 4;
+    Address = Address + 2; /* Inspect both data and virtual-address halfwords. */
   }
   
   /* Return readstatus value: (0: Page not erased, 1: Page erased) */

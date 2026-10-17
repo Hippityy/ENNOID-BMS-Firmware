@@ -19,6 +19,8 @@
  */
 
 #include "modCommands.h"
+#include "modConfigWire.h"
+#include "modCommandPolicy.h"
 #include "confxml.h"
 #include "confparser.h"
 #include "libMempools.h"
@@ -29,6 +31,12 @@
 static uint8_t modCommandsSendBuffer[PACKET_MAX_PL_LEN];
 static void(*modCommandsSendFunction)(unsigned char *data, unsigned int len) = 0;
 bool jumpBootloaderTrue;
+static bool modCommandsCommissioning;
+static bool modCommandsHasPendingConfig;
+static modConfigGeneralConfigStructTypedef modCommandsPendingConfig;
+static uint32_t modCommandsBootloaderDelayTick;
+static void modCommandsConfigToVESC(main_config_t *conf,
+    const modConfigGeneralConfigStructTypedef *config);
 modConfigGeneralConfigStructTypedef *modCommandsGeneralConfig;
 modConfigGeneralConfigStructTypedef *modCommandsToBeSendConfig;
 modConfigGeneralConfigStructTypedef  modCommandsConfigStorage;
@@ -38,6 +46,15 @@ void modCommandsInit(modPowerElectronicsPackStateTypedef   *generalState,modConf
 	modCommandsGeneralConfig = configPointer;
 	modCommandsGeneralState  = generalState;
 	jumpBootloaderTrue = false;
+    modCommandsHasPendingConfig = false;
+}
+
+bool modCommandsIsCommissioningMode(void) {
+    return modCommandsCommissioning;
+}
+
+void modCommandsSetCommissioningMode(bool enabled) {
+    modCommandsCommissioning = enabled;
 }
 
 void modCommandsSetSendFunction(void(*func)(unsigned char *data, unsigned int len)) {
@@ -51,7 +68,7 @@ void modCommandsSendPacket(unsigned char *data, unsigned int len) {
 }
 
 void modCommandsProcessPacket(unsigned char *data, unsigned int len) {
-	if (!len) {
+	if (!data || !len || len > PACKET_MAX_PL_LEN) {
 		return;
 	}
 
@@ -59,7 +76,6 @@ void modCommandsProcessPacket(unsigned char *data, unsigned int len) {
 	int32_t ind = 0;
 	uint16_t flash_res;
 	uint32_t new_app_offset;
-	uint32_t delayTick;
 	uint8_t cellPointer;
 	uint8_t auxPointer;
 	uint8_t expPointer;
@@ -69,6 +85,7 @@ void modCommandsProcessPacket(unsigned char *data, unsigned int len) {
 	packet_id = (COMM_PACKET_ID) data[0];
 	data++;
 	len--;
+    if (!modCommandPolicyAllows(packet_id, data, len, modCommandsCommissioning)) return;
 
 	switch (packet_id) {
 		case COMM_FW_VERSION:
@@ -91,7 +108,7 @@ void modCommandsProcessPacket(unsigned char *data, unsigned int len) {
 			break;
 		case COMM_JUMP_TO_BOOTLOADER:
 			jumpBootloaderTrue = true;
-			delayTick = HAL_GetTick();
+			modCommandsBootloaderDelayTick = HAL_GetTick();
 			break;
 		case COMM_ERASE_NEW_APP:
 			ind = 0;
@@ -187,228 +204,36 @@ void modCommandsProcessPacket(unsigned char *data, unsigned int len) {
 			modCommandsSendPacket(modCommandsSendBuffer, ind);
 			break;
 		case COMM_EBMS_SET_MCCONF:
-			ind = 0;
-			modCommandsGeneralConfig->noOfCellsSeries				= libBufferGet_uint8(data,&ind);		// 1
-			modCommandsGeneralConfig->noOfCellsParallel				= libBufferGet_uint8(data,&ind);		// 1
-			modCommandsGeneralConfig->noOfParallelModules				= libBufferGet_uint8(data,&ind);		// 1
-			modCommandsGeneralConfig->batteryCapacity				= libBufferGet_float32_auto(data,&ind);		// 4
-			modCommandsGeneralConfig->cellHardUnderVoltage				= libBufferGet_float32_auto(data,&ind);		// 4
-			modCommandsGeneralConfig->cellHardOverVoltage				= libBufferGet_float32_auto(data,&ind);		// 4
-			modCommandsGeneralConfig->cellLCSoftUnderVoltage			= libBufferGet_float32_auto(data,&ind);		// 4
-			modCommandsGeneralConfig->cellSoftOverVoltage				= libBufferGet_float32_auto(data,&ind);		// 4
-			modCommandsGeneralConfig->cellBalanceDifferenceThreshold		= libBufferGet_float32_auto(data,&ind);		// 4
-			modCommandsGeneralConfig->cellBalanceStart				= libBufferGet_float32_auto(data,&ind);		// 4
-			modCommandsGeneralConfig->cellBalanceAllTime				= libBufferGet_uint8(data,&ind);		// 1
-			modCommandsGeneralConfig->cellThrottleUpperStart			= libBufferGet_float32_auto(data,&ind);		// 4
-			modCommandsGeneralConfig->cellThrottleLowerStart			= libBufferGet_float32_auto(data,&ind);		// 4
-			modCommandsGeneralConfig->cellThrottleUpperMargin			= libBufferGet_float32_auto(data,&ind);		// 4
-			modCommandsGeneralConfig->cellThrottleLowerMargin			= libBufferGet_float32_auto(data,&ind);		// 4
-		  	modCommandsGeneralConfig->packVoltageDataSource				= libBufferGet_uint8(data,&ind);		// 1
-		  	modCommandsGeneralConfig->packCurrentDataSource				= libBufferGet_uint8(data,&ind);		// 1
-		  	modCommandsGeneralConfig->buzzerSignalSource				= libBufferGet_uint8(data,&ind);		// 1
-		  	modCommandsGeneralConfig->buzzerSignalPersistant			= libBufferGet_uint8(data,&ind);		// 1
-			modCommandsGeneralConfig->shuntLCFactor					= libBufferGet_float32_auto(data,&ind);		// 4
-			modCommandsGeneralConfig->voltageLCFactor				= libBufferGet_float32_auto(data,&ind);		// 4
-			modCommandsGeneralConfig->voltageLCOffset				= libBufferGet_int16(data,&ind);		// 2
-			modCommandsGeneralConfig->loadVoltageFactor				= libBufferGet_float32_auto(data,&ind);		// 4
-			modCommandsGeneralConfig->loadVoltageOffset				= libBufferGet_float32_auto(data,&ind);		// 4
-			modCommandsGeneralConfig->chargerVoltageFactor				= libBufferGet_float32_auto(data,&ind);		// 4
-			modCommandsGeneralConfig->chargerVoltageOffset				= libBufferGet_float32_auto(data,&ind);		// 4
-		  	modCommandsGeneralConfig->throttleChargeIncreaseRate			= libBufferGet_uint8(data,&ind);		// 1
-		  	modCommandsGeneralConfig->throttleDisChargeIncreaseRate			= libBufferGet_uint8(data,&ind);		// 1
-		  	modCommandsGeneralConfig->cellBalanceUpdateInterval			= libBufferGet_uint32(data,&ind);		// 4
-		  	modCommandsGeneralConfig->maxSimultaneousDischargingCells		= libBufferGet_uint8(data,&ind);		// 1
-		  	modCommandsGeneralConfig->timeoutDischargeRetry				= libBufferGet_uint32(data,&ind);		// 4
-			modCommandsGeneralConfig->hysteresisDischarge				= libBufferGet_float32_auto(data,&ind);		// 4
-		  	modCommandsGeneralConfig->timeoutChargeRetry				= libBufferGet_uint32(data,&ind);		// 4
-			modCommandsGeneralConfig->hysteresisCharge				= libBufferGet_float32_auto(data,&ind);		// 4
-			modCommandsGeneralConfig->timeoutChargeCompleted			= libBufferGet_uint32(data,&ind);		// 4
-			modCommandsGeneralConfig->timeoutChargingCompletedMinimalMismatch	= libBufferGet_uint32(data,&ind);		// 4
-			modCommandsGeneralConfig->maxMismatchThreshold				= libBufferGet_float32_auto(data,&ind);		// 4
-			modCommandsGeneralConfig->chargerEnabledThreshold			= libBufferGet_float32_auto(data,&ind);		// 4
-			modCommandsGeneralConfig->timeoutChargerDisconnected			= libBufferGet_uint32(data,&ind);		// 4
-			modCommandsGeneralConfig->minimalPrechargePercentage			= libBufferGet_float32_auto(data,&ind);		// 4
-			modCommandsGeneralConfig->timeoutLCPreCharge				= libBufferGet_uint32(data,&ind);		// 4
-			modCommandsGeneralConfig->maxAllowedCurrent				= libBufferGet_float32_auto(data,&ind);		// 4
-			modCommandsGeneralConfig->allowedTempBattDischargingMax			= libBufferGet_float32_auto(data,&ind);		// 4
-			modCommandsGeneralConfig->allowedTempBattDischargingMin			= libBufferGet_float32_auto(data,&ind);		// 4
-			modCommandsGeneralConfig->allowedTempBattChargingMax			= libBufferGet_float32_auto(data,&ind);		// 4
-			modCommandsGeneralConfig->allowedTempBattChargingMin			= libBufferGet_float32_auto(data,&ind);		// 4
-			modCommandsGeneralConfig->allowedTempBattCoolingMax			= libBufferGet_float32_auto(data,&ind);		// 4
-			modCommandsGeneralConfig->allowedTempBattCoolingMin			= libBufferGet_float32_auto(data,&ind);		// 4
-			modCommandsGeneralConfig->allowedTempBMSMax				= libBufferGet_float32_auto(data,&ind);		// 4
-			modCommandsGeneralConfig->allowedTempBMSMin				= libBufferGet_float32_auto(data,&ind);		// 4
-			modCommandsGeneralConfig->displayTimeoutBatteryDead			= libBufferGet_uint32(data,&ind);		// 4
-			modCommandsGeneralConfig->displayTimeoutBatteryError			= libBufferGet_uint32(data,&ind);		// 4
-			modCommandsGeneralConfig->displayTimeoutBatteryErrorPreCharge		= libBufferGet_uint32(data,&ind);		// 4
-			modCommandsGeneralConfig->displayTimeoutSplashScreen			= libBufferGet_uint32(data,&ind);		// 4
-		  	modCommandsGeneralConfig->displayStyle					= libBufferGet_uint8(data,&ind);		// 1
-			modCommandsGeneralConfig->maxUnderAndOverVoltageErrorCount		= libBufferGet_uint8(data,&ind);		// 1
-			modCommandsGeneralConfig->maxUnderAndOverTemperatureErrorCount		= libBufferGet_uint8(data,&ind);		// 1
-			modCommandsGeneralConfig->notUsedCurrentThreshold			= libBufferGet_float32_auto(data,&ind);		// 4
-			modCommandsGeneralConfig->notUsedTimeout				= libBufferGet_uint32(data,&ind);		// 4
-			modCommandsGeneralConfig->stateOfChargeStoreInterval			= libBufferGet_uint32(data,&ind);		// 4
-			modCommandsGeneralConfig->stateOfChargeMethod				= libBufferGet_uint8(data,&ind);		// 1
-			modCommandsGeneralConfig->CANID						= libBufferGet_uint8(data,&ind);		// 1
-			modCommandsGeneralConfig->CANIDStyle					= libBufferGet_uint8(data,&ind);		// 1
-      			modCommandsGeneralConfig->canBusSpeed					= libBufferGet_uint8(data,&ind);		// 1
-			modCommandsGeneralConfig->emitStatusOverCAN				= libBufferGet_uint8(data,&ind);		// 1
-			modCommandsGeneralConfig->emitStatusProtocol				= libBufferGet_uint8(data,&ind);		// 1
-			modCommandsGeneralConfig->tempEnableMaskBMS				= libBufferGet_uint32(data,&ind);		// 4
-			modCommandsGeneralConfig->tempEnableMaskBattery				= libBufferGet_uint32(data,&ind);		// 4
-			modCommandsGeneralConfig->tempEnableMaskExpansion			= libBufferGet_uint32(data,&ind);		// 4
-			modCommandsGeneralConfig->noOfTempSensorPerModule			= libBufferGet_uint8(data,&ind);		// 1
-			modCommandsGeneralConfig->noOfExpansionBoard				= libBufferGet_uint8(data,&ind);		// 1
-			modCommandsGeneralConfig->noOfTempSensorPerExpansionBoard		= libBufferGet_uint8(data,&ind);		// 1
-		  	modCommandsGeneralConfig->LCUseDischarge				= libBufferGet_uint8(data,&ind);		// 1
-			modCommandsGeneralConfig->LCUsePrecharge				= libBufferGet_uint8(data,&ind);		// 1
-			modCommandsGeneralConfig->allowChargingDuringDischarge			= libBufferGet_uint8(data,&ind);		// 1
-			modCommandsGeneralConfig->allowForceOn					= libBufferGet_uint8(data,&ind);		// 1
-			modCommandsGeneralConfig->pulseToggleButton				= libBufferGet_uint8(data,&ind);		// 1
-			modCommandsGeneralConfig->useCANSafetyInput				= libBufferGet_uint8(data,&ind);		// 1
-			modCommandsGeneralConfig->useCANDelayedPowerDown			= libBufferGet_uint8(data,&ind);		// 1
-			modCommandsGeneralConfig->NTCTopResistor[modConfigNTCGroupLTCExt]	= libBufferGet_uint32(data,&ind);		// 4
-			modCommandsGeneralConfig->NTC25DegResistance[modConfigNTCGroupLTCExt]	= libBufferGet_uint32(data,&ind);		// 4
-			modCommandsGeneralConfig->NTCBetaFactor[modConfigNTCGroupLTCExt]	= libBufferGet_uint16(data,&ind);		// 2
-			modCommandsGeneralConfig->NTCTopResistor[modConfigNTCGroupMasterPCB]	= libBufferGet_uint32(data,&ind);		// 4
-			modCommandsGeneralConfig->NTC25DegResistance[modConfigNTCGroupMasterPCB]= libBufferGet_uint32(data,&ind);		// 4
-			modCommandsGeneralConfig->NTCBetaFactor[modConfigNTCGroupMasterPCB]	= libBufferGet_uint16(data,&ind);		// 2
-			modCommandsGeneralConfig->NTCTopResistor[modConfigNTCGroupExp]		= libBufferGet_uint32(data,&ind);		// 4
-			modCommandsGeneralConfig->NTC25DegResistance[modConfigNTCGroupExp]	= libBufferGet_uint32(data,&ind);		// 4
-			modCommandsGeneralConfig->NTCBetaFactor[modConfigNTCGroupExp]		= libBufferGet_uint16(data,&ind);		// 2
-			modCommandsGeneralConfig->cellMonitorType				= libBufferGet_uint8(data,&ind);		// 1
-			modCommandsGeneralConfig->cellMonitorICCount				= libBufferGet_uint8(data,&ind);		// 1
-			modCommandsGeneralConfig->externalEnableOperationalState		= libBufferGet_uint8(data,&ind);		// 1
-			modCommandsGeneralConfig->chargeEnableOperationalState			= libBufferGet_uint8(data,&ind);		// 1
-			modCommandsGeneralConfig->powerDownDelay				= libBufferGet_uint32(data,&ind);		// 4
-			modCommandsGeneralConfig->humidityICType				= libBufferGet_uint8(data,&ind);		// 1
-			modCommandsGeneralConfig->cellTypeUsed					= libBufferGet_uint8(data,&ind);		// 1
-			modCommandsGeneralConfig->firstICNoCells				= libBufferGet_uint8(data,&ind);		// 1
-			modCommandsGeneralConfig->lastICNoOfCells				= libBufferGet_uint8(data,&ind);		// 1
-			
-			ind = 0;
-			modCommandsSendBuffer[ind++] = packet_id;
-			modCommandsSendPacket(modCommandsSendBuffer, ind);
-			
-			modconfigHardwareLimitsApply(modCommandsGeneralConfig);
-		
-			break;
-		case COMM_EBMS_GET_MCCONF:
-		case COMM_EBMS_GET_MCCONF_DEFAULT:
-      			if(packet_id == COMM_EBMS_GET_MCCONF_DEFAULT){
-				modConfigLoadDefaultConfig(&modCommandsConfigStorage);
-				modCommandsToBeSendConfig = &modCommandsConfigStorage;
-			}else{
-				modCommandsToBeSendConfig = modCommandsGeneralConfig;
-			}
-		
-      			ind = 0;
-		  	modCommandsSendBuffer[ind++] = packet_id;
-		  
-		  	libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->noOfCellsSeries					,&ind); // 1
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->noOfCellsParallel				,&ind); // 1
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->noOfParallelModules				,&ind); // 1
-		  	libBufferAppend_float32_auto( modCommandsSendBuffer,modCommandsToBeSendConfig->batteryCapacity					,&ind); // 4
-			libBufferAppend_float32_auto( modCommandsSendBuffer,modCommandsToBeSendConfig->cellHardUnderVoltage				,&ind); // 4
-		  	libBufferAppend_float32_auto( modCommandsSendBuffer,modCommandsToBeSendConfig->cellHardOverVoltage				,&ind); // 4
-		  	libBufferAppend_float32_auto( modCommandsSendBuffer,modCommandsToBeSendConfig->cellLCSoftUnderVoltage				,&ind); // 4
-		  	libBufferAppend_float32_auto( modCommandsSendBuffer,modCommandsToBeSendConfig->cellSoftOverVoltage				,&ind); // 4
-		  	libBufferAppend_float32_auto( modCommandsSendBuffer,modCommandsToBeSendConfig->cellBalanceDifferenceThreshold			,&ind); // 4
-		  	libBufferAppend_float32_auto( modCommandsSendBuffer,modCommandsToBeSendConfig->cellBalanceStart					,&ind); // 4
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->cellBalanceAllTime				,&ind); // 1
-		  	libBufferAppend_float32_auto( modCommandsSendBuffer,modCommandsToBeSendConfig->cellThrottleUpperStart				,&ind); // 4
-		  	libBufferAppend_float32_auto( modCommandsSendBuffer,modCommandsToBeSendConfig->cellThrottleLowerStart				,&ind); // 4
-		  	libBufferAppend_float32_auto( modCommandsSendBuffer,modCommandsToBeSendConfig->cellThrottleUpperMargin				,&ind); // 4
-		 	libBufferAppend_float32_auto( modCommandsSendBuffer,modCommandsToBeSendConfig->cellThrottleLowerMargin				,&ind); // 4
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->packVoltageDataSource				,&ind); // 1
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->packCurrentDataSource				,&ind); // 1
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->buzzerSignalSource				,&ind); // 1
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->buzzerSignalPersistant				,&ind); // 1
-			libBufferAppend_float32_auto( modCommandsSendBuffer,modCommandsToBeSendConfig->shuntLCFactor					,&ind); // 4
-			libBufferAppend_float32_auto( modCommandsSendBuffer,modCommandsToBeSendConfig->voltageLCFactor					,&ind); // 4
-			libBufferAppend_int16(        modCommandsSendBuffer,modCommandsToBeSendConfig->voltageLCOffset					,&ind); // 2
-			libBufferAppend_float32_auto( modCommandsSendBuffer,modCommandsToBeSendConfig->loadVoltageFactor				,&ind); // 4
-			libBufferAppend_float32_auto( modCommandsSendBuffer,modCommandsToBeSendConfig->loadVoltageOffset				,&ind); // 4
-		 	libBufferAppend_float32_auto( modCommandsSendBuffer,modCommandsToBeSendConfig->chargerVoltageFactor				,&ind); // 4
-			libBufferAppend_float32_auto( modCommandsSendBuffer,modCommandsToBeSendConfig->chargerVoltageOffset				,&ind); // 4
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->throttleChargeIncreaseRate			,&ind); // 1
-		  	libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->throttleDisChargeIncreaseRate			,&ind); // 1
-		  	libBufferAppend_uint32(       modCommandsSendBuffer,modCommandsToBeSendConfig->cellBalanceUpdateInterval			,&ind); // 4
-		  	libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->maxSimultaneousDischargingCells			,&ind); // 1
-		  	libBufferAppend_uint32(       modCommandsSendBuffer,modCommandsToBeSendConfig->timeoutDischargeRetry				,&ind); // 4
-			libBufferAppend_float32_auto( modCommandsSendBuffer,modCommandsToBeSendConfig->hysteresisDischarge				,&ind); // 4
-		  	libBufferAppend_uint32(       modCommandsSendBuffer,modCommandsToBeSendConfig->timeoutChargeRetry				,&ind); // 4
-			libBufferAppend_float32_auto( modCommandsSendBuffer,modCommandsToBeSendConfig->hysteresisCharge					,&ind); // 4
-			libBufferAppend_uint32(       modCommandsSendBuffer,modCommandsToBeSendConfig->timeoutChargeCompleted				,&ind); // 4
-			libBufferAppend_uint32(       modCommandsSendBuffer,modCommandsToBeSendConfig->timeoutChargingCompletedMinimalMismatch		,&ind); // 4
-			libBufferAppend_float32_auto( modCommandsSendBuffer,modCommandsToBeSendConfig->maxMismatchThreshold				,&ind); // 4
-			libBufferAppend_float32_auto( modCommandsSendBuffer,modCommandsToBeSendConfig->chargerEnabledThreshold				,&ind); // 4
-			libBufferAppend_uint32(       modCommandsSendBuffer,modCommandsToBeSendConfig->timeoutChargerDisconnected			,&ind); // 4
-			libBufferAppend_float32_auto( modCommandsSendBuffer,modCommandsToBeSendConfig->minimalPrechargePercentage			,&ind); // 4
-			libBufferAppend_uint32(       modCommandsSendBuffer,modCommandsToBeSendConfig->timeoutLCPreCharge				,&ind); // 4
-			libBufferAppend_float32_auto( modCommandsSendBuffer,modCommandsToBeSendConfig->maxAllowedCurrent				,&ind); // 4
-			libBufferAppend_float32_auto( modCommandsSendBuffer,modCommandsToBeSendConfig->allowedTempBattDischargingMax			,&ind); // 4
-			libBufferAppend_float32_auto( modCommandsSendBuffer,modCommandsToBeSendConfig->allowedTempBattDischargingMin			,&ind); // 4
-			libBufferAppend_float32_auto( modCommandsSendBuffer,modCommandsToBeSendConfig->allowedTempBattChargingMax			,&ind); // 4
-			libBufferAppend_float32_auto( modCommandsSendBuffer,modCommandsToBeSendConfig->allowedTempBattChargingMin			,&ind); // 4
-			libBufferAppend_float32_auto( modCommandsSendBuffer,modCommandsToBeSendConfig->allowedTempBattCoolingMax			,&ind); // 4
-			libBufferAppend_float32_auto( modCommandsSendBuffer,modCommandsToBeSendConfig->allowedTempBattCoolingMin			,&ind); // 4
-			libBufferAppend_float32_auto( modCommandsSendBuffer,modCommandsToBeSendConfig->allowedTempBMSMax				,&ind); // 4
-			libBufferAppend_float32_auto( modCommandsSendBuffer,modCommandsToBeSendConfig->allowedTempBMSMin				,&ind); // 4
-			libBufferAppend_uint32(       modCommandsSendBuffer,modCommandsToBeSendConfig->displayTimeoutBatteryDead			,&ind); // 4
-			libBufferAppend_uint32(       modCommandsSendBuffer,modCommandsToBeSendConfig->displayTimeoutBatteryError			,&ind); // 4
-			libBufferAppend_uint32(       modCommandsSendBuffer,modCommandsToBeSendConfig->displayTimeoutBatteryErrorPreCharge		,&ind); // 4
-			libBufferAppend_uint32(       modCommandsSendBuffer,modCommandsToBeSendConfig->displayTimeoutSplashScreen			,&ind); // 4
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->displayStyle					,&ind); // 1
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->maxUnderAndOverVoltageErrorCount			,&ind); // 1
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->maxUnderAndOverTemperatureErrorCount		,&ind); // 1
-			libBufferAppend_float32_auto( modCommandsSendBuffer,modCommandsToBeSendConfig->notUsedCurrentThreshold				,&ind); // 4
-			libBufferAppend_uint32(       modCommandsSendBuffer,modCommandsToBeSendConfig->notUsedTimeout					,&ind); // 4
-			libBufferAppend_uint32(       modCommandsSendBuffer,modCommandsToBeSendConfig->stateOfChargeStoreInterval			,&ind); // 4
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->stateOfChargeMethod				,&ind); // 1
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->CANID						,&ind); // 1
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->CANIDStyle					,&ind); // 1
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->canBusSpeed					,&ind); // 1
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->emitStatusOverCAN				,&ind); // 1
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->emitStatusProtocol				,&ind); // 1
-			libBufferAppend_uint32(       modCommandsSendBuffer,modCommandsToBeSendConfig->tempEnableMaskBMS				,&ind); // 4
-			libBufferAppend_uint32(       modCommandsSendBuffer,modCommandsToBeSendConfig->tempEnableMaskBattery				,&ind); // 4
-			libBufferAppend_uint32(       modCommandsSendBuffer,modCommandsToBeSendConfig->tempEnableMaskExpansion				,&ind); // 4
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->noOfTempSensorPerModule				,&ind); // 1
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->noOfExpansionBoard				,&ind); // 1
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->noOfTempSensorPerExpansionBoard			,&ind); // 1
-		  	libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->LCUseDischarge					,&ind); // 1
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->LCUsePrecharge					,&ind); // 1
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->allowChargingDuringDischarge			,&ind); // 1
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->allowForceOn					,&ind); // 1
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->pulseToggleButton				,&ind); // 1
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->useCANSafetyInput				,&ind); // 1
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->useCANDelayedPowerDown				,&ind); // 1
-			libBufferAppend_uint32(       modCommandsSendBuffer,modCommandsToBeSendConfig->NTCTopResistor[modConfigNTCGroupLTCExt]		,&ind); // 4
-			libBufferAppend_uint32(       modCommandsSendBuffer,modCommandsToBeSendConfig->NTC25DegResistance[modConfigNTCGroupLTCExt]	,&ind); // 4
-			libBufferAppend_uint16(       modCommandsSendBuffer,modCommandsToBeSendConfig->NTCBetaFactor[modConfigNTCGroupLTCExt]		,&ind); // 2
-			libBufferAppend_uint32(       modCommandsSendBuffer,modCommandsToBeSendConfig->NTCTopResistor[modConfigNTCGroupMasterPCB]	,&ind); // 4
-			libBufferAppend_uint32(       modCommandsSendBuffer,modCommandsToBeSendConfig->NTC25DegResistance[modConfigNTCGroupMasterPCB]	,&ind); // 4
-			libBufferAppend_uint16(       modCommandsSendBuffer,modCommandsToBeSendConfig->NTCBetaFactor[modConfigNTCGroupMasterPCB]	,&ind); // 2
-			libBufferAppend_uint32(       modCommandsSendBuffer,modCommandsToBeSendConfig->NTCTopResistor[modConfigNTCGroupExp]		,&ind); // 4
-			libBufferAppend_uint32(       modCommandsSendBuffer,modCommandsToBeSendConfig->NTC25DegResistance[modConfigNTCGroupExp]		,&ind); // 4
-			libBufferAppend_uint16(       modCommandsSendBuffer,modCommandsToBeSendConfig->NTCBetaFactor[modConfigNTCGroupExp]		,&ind); // 2
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->cellMonitorType					,&ind); // 1
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->cellMonitorICCount				,&ind); // 1
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->externalEnableOperationalState			,&ind); // 1
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->chargeEnableOperationalState			,&ind); // 1	
-			libBufferAppend_uint32(       modCommandsSendBuffer,modCommandsToBeSendConfig->powerDownDelay					,&ind); // 4
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->humidityICType					,&ind); // 1
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->cellTypeUsed						,&ind); // 1
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->firstICNoCells					,&ind); // 1
-			libBufferAppend_uint8(        modCommandsSendBuffer,modCommandsToBeSendConfig->lastICNoOfCells					,&ind); // 1
-			
-		  	modCommandsSendPacket(modCommandsSendBuffer, ind);
-			break;
-		case COMM_TERMINAL_CMD:
-		  	data[len] = '\0';
-		  	modTerminalProcessString((char*)data);
-			break;
+            if (!modCommandsHasPendingConfig) modCommandsPendingConfig = *modCommandsGeneralConfig;
+            if (!modConfigWireDecode(&modCommandsPendingConfig, data, len)) break;
+            modCommandsHasPendingConfig = true;
+            modCommandsSendBuffer[0] = packet_id;
+            modCommandsSendPacket(modCommandsSendBuffer, 1);
+            break;
+        case COMM_EBMS_GET_MCCONF:
+        case COMM_EBMS_GET_MCCONF_DEFAULT:
+            if (len != 0) break;
+            if (packet_id == COMM_EBMS_GET_MCCONF_DEFAULT) {
+                modConfigLoadDefaultConfig(&modCommandsConfigStorage);
+                if (!modConfigValidate(&modCommandsConfigStorage)) break;
+                modCommandsToBeSendConfig = &modCommandsConfigStorage;
+            } else {
+                modCommandsToBeSendConfig = modCommandsHasPendingConfig ?
+                    &modCommandsPendingConfig : modCommandsGeneralConfig;
+            }
+            modCommandsSendBuffer[0] = packet_id;
+            ind = modConfigWireEncode(modCommandsSendBuffer + 1,
+                sizeof(modCommandsSendBuffer) - 1, modCommandsToBeSendConfig);
+            if (ind == MOD_CONFIG_WIRE_SIZE)
+                modCommandsSendPacket(modCommandsSendBuffer, ind + 1);
+            break;
+        case COMM_TERMINAL_CMD: {
+            char terminal[128];
+            memcpy(terminal, data, len);
+            terminal[len] = '\0';
+            modTerminalProcessString(terminal);
+            break;
+        }
 		case COMM_REBOOT:
 			modCommandsJumpToMainApplication();
 			break;
@@ -418,7 +243,11 @@ void modCommandsProcessPacket(unsigned char *data, unsigned int len) {
 			modCANSendBuffer(data[0], data + 1, len - 1, false);
 			break;
 		case COMM_EBMS_STORE_CONF:
-			modConfigStoreConfig();
+            if (len != 0) break;
+            if (modCommandsHasPendingConfig) {
+                if (!modConfigStoreCandidate(&modCommandsPendingConfig)) break;
+                modCommandsSetCommissioningMode(true);
+            } else if (!modConfigStoreConfig()) break;
 		
 			ind = 0;
 			modCommandsSendBuffer[ind++] = packet_id;
@@ -497,18 +326,16 @@ void modCommandsProcessPacket(unsigned char *data, unsigned int len) {
 		break;
 		case COMM_GET_CUSTOM_CONFIG:
 		case COMM_GET_CUSTOM_CONFIG_DEFAULT: {
-			main_config_t *conf = libMempools_alloc_conf();
-
-			int conf_ind = data[0];
-
-			if (conf_ind != 0) {
-				break;
-			}
+            int conf_ind = data[0];
+            if (conf_ind != 0) break;
+            main_config_t *conf = libMempools_alloc_conf();
+            if (!conf) break;
 
 			if (packet_id == COMM_GET_CUSTOM_CONFIG) {
 				modCommandsEBMSToVESC(conf);
 			} else {
-				confparser_set_defaults_main_config_t(conf);
+                modConfigLoadDefaultConfig(&modCommandsConfigStorage);
+                modCommandsConfigToVESC(conf, &modCommandsConfigStorage);
 			}
 
 			ind = 0;
@@ -524,8 +351,9 @@ void modCommandsProcessPacket(unsigned char *data, unsigned int len) {
 
 			int conf_ind = data[0];
 
-			if (conf_ind == 0 && confparser_deserialize_main_config_t(data + 1, conf)) {
-				modCommandsVESCToEBMS(conf);
+            if (!conf) break;
+            if (conf_ind == 0 && confparser_deserialize_main_config_t(data + 1, conf) &&
+                modCommandsVESCToEBMS(conf)) {
 
 				ind = 0;
 				//modCommandsSendBuffer[50];
@@ -550,7 +378,9 @@ void modCommandsProcessPacket(unsigned char *data, unsigned int len) {
 			int32_t len_conf = libBufferGet_int32(data, &ind);
 			int32_t ofs_conf = libBufferGet_int32(data, &ind);
 
-			if ((len_conf + ofs_conf) > DATA_MAIN_CONFIG_T__SIZE || len_conf > (PACKET_MAX_PL_LEN - 10)) {
+			if (len_conf < 0 || ofs_conf < 0 || ofs_conf > DATA_MAIN_CONFIG_T__SIZE ||
+                len_conf > DATA_MAIN_CONFIG_T__SIZE - ofs_conf ||
+                len_conf > (PACKET_MAX_PL_LEN - 10)) {
 			break;
 			}
 
@@ -569,7 +399,7 @@ void modCommandsProcessPacket(unsigned char *data, unsigned int len) {
 			break;
 	}
 	
-	if(modDelayTick1ms(&delayTick,1000) && jumpBootloaderTrue)
+	if(modDelayTick1ms(&modCommandsBootloaderDelayTick,1000) && jumpBootloaderTrue)
 		modFlashJumpToBootloader();
 }
 
@@ -588,40 +418,57 @@ void modCommandsPrintf(const char* format, ...) {
 	}
 }
 
-void modCommandsVESCToEBMS(main_config_t *conf) {
+bool modCommandsVESCToEBMS(main_config_t *conf) {
+    if (!conf || conf->cell_num <= 0 || conf->cell_num > 180 ||
+        conf->temp_num < 0 || conf->temp_num > 9) return false;
+    modConfigGeneralConfigStructTypedef next = modCommandsHasPendingConfig ?
+        modCommandsPendingConfig : *modCommandsGeneralConfig;
+    modConfigGeneralConfigStructTypedef *target = &next;
 	
-	modCommandsGeneralConfig->CANID	= conf->controller_id;
-	modCommandsGeneralConfig->canBusSpeed = conf->can_baud_rate;
-	modCommandsGeneralConfig->noOfCellsSeries = conf->cell_num;
-	modCommandsGeneralConfig->noOfTempSensorPerModule = conf->temp_num;
-	modCommandsGeneralConfig->cellBalanceStart = conf->balance_start_voltage;
-	modCommandsGeneralConfig->maxMismatchThreshold = conf->balance_difference_threshold;
-	modCommandsGeneralConfig->cellSoftOverVoltage = conf->soft_overvoltage;
-	modCommandsGeneralConfig->cellLCSoftUnderVoltage = conf->soft_undervoltage;
-	modCommandsGeneralConfig->cellHardOverVoltage = conf->hard_overvoltage;
-	modCommandsGeneralConfig->cellHardUnderVoltage = conf->hard_undervoltage;
-	modCommandsGeneralConfig->allowedTempBattChargingMax = conf->t_charge_max;
-	modCommandsGeneralConfig->allowedTempBattDischargingMax = conf->t_discharge_max;
-	modCommandsGeneralConfig->notUsedCurrentThreshold = conf->not_used_current_threshold;
-	modCommandsGeneralConfig->notUsedTimeout = conf->not_used_timeout;
+	target->CANID	= conf->controller_id;
+	target->canBusSpeed = conf->can_baud_rate;
+	target->noOfCellsSeries = conf->cell_num;
+	target->noOfTempSensorPerModule = conf->temp_num;
+	target->cellBalanceStart = conf->balance_start_voltage;
+	target->cellBalanceDifferenceThreshold = conf->balance_difference_threshold;
+	target->cellSoftOverVoltage = conf->soft_overvoltage;
+	target->cellLCSoftUnderVoltage = conf->soft_undervoltage;
+	target->cellHardOverVoltage = conf->hard_overvoltage;
+	target->cellHardUnderVoltage = conf->hard_undervoltage;
+	target->allowedTempBattChargingMax = conf->t_charge_max;
+	target->allowedTempBattDischargingMax = conf->t_discharge_max;
+	target->notUsedCurrentThreshold = conf->not_used_current_threshold;
+	target->notUsedTimeout = conf->not_used_timeout;
 
+    if (!modConfigValidate(&next)) return false;
+    if (!modConfigStoreCandidate(&next)) return false;
+    modCommandsPendingConfig = next;
+    modCommandsHasPendingConfig = true;
+    modCommandsSetCommissioningMode(true);
+    return true;
 }
 
 void modCommandsEBMSToVESC(main_config_t *conf) {
-	conf->controller_id = modCommandsGeneralConfig->CANID;
-	conf->can_baud_rate = modCommandsGeneralConfig->canBusSpeed;
-	conf->cell_num = modCommandsGeneralConfig->noOfCellsSeries;
-	conf->temp_num = modCommandsGeneralConfig->noOfTempSensorPerModule;
-	conf->balance_start_voltage = modCommandsGeneralConfig->cellBalanceStart;
-	conf->balance_difference_threshold = modCommandsGeneralConfig->maxMismatchThreshold;
-	conf->soft_overvoltage = modCommandsGeneralConfig->cellSoftOverVoltage;
-	conf->soft_undervoltage = modCommandsGeneralConfig->cellLCSoftUnderVoltage;
-	conf->hard_overvoltage = modCommandsGeneralConfig->cellHardOverVoltage;
-	conf->hard_undervoltage = modCommandsGeneralConfig->cellHardUnderVoltage;
-	conf->t_charge_max = modCommandsGeneralConfig->allowedTempBattChargingMax;
-	conf->t_discharge_max = modCommandsGeneralConfig->allowedTempBattDischargingMax;
-	conf->not_used_current_threshold = modCommandsGeneralConfig->notUsedCurrentThreshold;
-	conf->not_used_timeout = modCommandsGeneralConfig->notUsedTimeout;
+    modCommandsConfigToVESC(conf, modCommandsHasPendingConfig ?
+        &modCommandsPendingConfig : modCommandsGeneralConfig);
+}
+
+static void modCommandsConfigToVESC(main_config_t *conf,
+    const modConfigGeneralConfigStructTypedef *config) {
+	conf->controller_id = config->CANID;
+	conf->can_baud_rate = config->canBusSpeed;
+	conf->cell_num = config->noOfCellsSeries;
+	conf->temp_num = config->noOfTempSensorPerModule;
+	conf->balance_start_voltage = config->cellBalanceStart;
+	conf->balance_difference_threshold = config->cellBalanceDifferenceThreshold;
+	conf->soft_overvoltage = config->cellSoftOverVoltage;
+	conf->soft_undervoltage = config->cellLCSoftUnderVoltage;
+	conf->hard_overvoltage = config->cellHardOverVoltage;
+	conf->hard_undervoltage = config->cellHardUnderVoltage;
+	conf->t_charge_max = config->allowedTempBattChargingMax;
+	conf->t_discharge_max = config->allowedTempBattDischargingMax;
+	conf->not_used_current_threshold = config->notUsedCurrentThreshold;
+	conf->not_used_timeout = config->notUsedTimeout;
 }
 
 void modCommandsJumpToMainApplication(void) {

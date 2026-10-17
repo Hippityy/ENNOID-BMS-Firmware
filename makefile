@@ -1,9 +1,14 @@
 # GCC makefile for ENNOID-BMS-SS firmware
+.DEFAULT_GOAL := all
 
 SRCS  = ./Main/main.c
 SRCS += ./Modules/Src/modCAN.c
+SRCS += ./Modules/Src/modCANTransport.c
+SRCS += ./Modules/Src/modCellMap.c
 SRCS += ./Modules/Src/modCommands.c
+SRCS += ./Modules/Src/modCommandPolicy.c
 SRCS += ./Modules/Src/modConfig.c
+SRCS += ./Modules/Src/modConfigWire.c
 SRCS += ./Modules/Src/modDelay.c
 SRCS += ./Modules/Src/modDisplay.c
 SRCS += ./Modules/Src/modEffect.c
@@ -91,6 +96,7 @@ OBJCOPY = arm-none-eabi-objcopy
 OBJDUMP = arm-none-eabi-objdump
 
 CFLAGS  = -std=gnu99 -g -Os -Wall
+CFLAGS += -MMD -MP
 CFLAGS += -mlittle-endian -mthumb -mthumb-interwork
 CFLAGS += -mcpu=cortex-m4 -fsingle-precision-constant
 CFLAGS += -Wdouble-promotion
@@ -186,3 +192,5 @@ clean:
 	-rm GCC/*.o
 	-rm Config/*.o
 	-rm Device/*.o
+
+-include $(OBJS:.o=.d)

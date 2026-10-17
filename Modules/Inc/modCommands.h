@@ -38,12 +38,14 @@
 
 // Functions
 void modCommandsInit(modPowerElectronicsPackStateTypedef   *generalState,modConfigGeneralConfigStructTypedef *configPointer);
+void modCommandsSetCommissioningMode(bool enabled);
+bool modCommandsIsCommissioningMode(void);
 void modCommandsSetSendFunction(void(*func)(unsigned char *data, unsigned int len));
 void modCommandsSendPacket(unsigned char *data, unsigned int len);
 void modCommandsProcessPacket(unsigned char *data, unsigned int len);
 void modCommandsPrintf(const char* format, ...);
 void modCommandsJumpToMainApplication(void);
-void modCommandsVESCToEBMS(main_config_t *config);
+bool modCommandsVESCToEBMS(main_config_t *config);
 void modCommandsEBMSToVESC(main_config_t *config);
 
 #endif /* COMMANDS_H_ */

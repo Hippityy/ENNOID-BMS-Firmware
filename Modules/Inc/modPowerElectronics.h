@@ -154,6 +154,7 @@ void  modPowerElectronicsSetCharge(bool newState);
 void  modPowerElectronicsSetChargePFET(bool newState);
 void  modPowerElectronicsSetCooling(bool newState);
 void  modPowerElectronicsDisableAll(void);
+void modPowerElectronicsEmergencyStop(void);
 void  modPowerElectronicsCalculateCellStats(void);
 void  modPowerElectronicsSubTaskBalancing(void);
 void  modPowerElectronicsCallMonitorsCalcBalanceResistorArray(void);

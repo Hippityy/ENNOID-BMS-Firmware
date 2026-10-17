@@ -147,7 +147,7 @@ void HAL_CAN_MspInit(CAN_HandleTypeDef* hcan)
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 		
     /* Peripheral interrupt init */
-    HAL_NVIC_SetPriority(CAN_RX0_IRQn, 0, 0);
+    HAL_NVIC_SetPriority(CAN_RX0_IRQn, 1, 0); /* SysTick must progress during RX storms. */
     HAL_NVIC_EnableIRQ(CAN_RX0_IRQn);
 
   /* USER CODE BEGIN CAN_MspInit 1 */

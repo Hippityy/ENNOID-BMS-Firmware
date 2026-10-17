@@ -47,6 +47,24 @@ void SystemClock_Config(void);
 void mainWatchDogInitAndStart(void);
 void mainWatchDogReset(void);
 void Error_Handler(void);
+static void mainCommissioningMode(void);
+
+/* Unknown/invalid stored layouts must never energize an accumulator using defaults. */
+static void mainCommissioningMode(void) {
+    driverHWSwitchesInit();
+    modPowerElectronicsEmergencyStop();
+    packState.chargeDesired = packState.disChargeDesired = false;
+    packState.chargeAllowed = packState.disChargeLCAllowed = false;
+    packState.faultState = FAULT_CODE_CONFIG_INVALID;
+    packState.operationalState = OP_STATE_ERROR;
+    modCommandsSetCommissioningMode(true);
+    for (;;) {
+        driverHWSwitchesDisableAll();
+        modUARTTask();
+        modCANCommissioningTask();
+        mainWatchDogReset();
+    }
+}
 
 int main(void) {			
   HAL_Init();
@@ -57,14 +75,15 @@ int main(void) {
 	// All following functions should be called in exactly this order
 	generalConfig            = modConfigInit();																// Tell EEPROM the needed size for ConfigStruct
 	generalStateOfCharge     = modStateOfChargeInit(&packState,generalConfig);// Tell EEPROM the needed size for StatOfChargeStruct
-	driverSWStorageManagerInit();																							// Initializes EEPROM Memory
-	modConfigStoreAndLoadDefaultConfig();																			// Store default config if needed -> load config from EEPROM
-	modStateOfChargeStoreAndLoadDefaultStateOfCharge();												// Determin SoC from cell voltage if needed -> load StateOfCharge from EEPROM
+	bool storedConfigReady = driverSWStorageManagerInit() && modConfigLoadConfig() &&
+                             modStateOfChargeLoadStateOfCharge();
+	if (!storedConfigReady) modConfigLoadDefaultConfig(generalConfig); /* UART context only. */
 	// Until here
 	
 	modPowerStateSetConfigHandle(generalConfig);                              // Tell the power state what input method is used en power on mode.
 	modCommandsInit(&packState,generalConfig);
 	modUARTInit();																	  												// Will act on UART message requests
+	if (!storedConfigReady) mainCommissioningMode();
 	modCANInit(&packState,generalConfig);																			// Will act on CAN message requests
 	modEffectInit();																													// Controls the effects on LEDs + buzzer
 	modEffectChangeState(STAT_LED_DEBUG,STAT_FLASH);													// Set Debug LED to blinking mode	
@@ -75,15 +94,20 @@ int main(void) {
   	//report_status_init(&packState); 
 		
   while(true) {
+        if (!driverSWStorageManagerIsReady() || modCommandsIsCommissioningMode()) mainCommissioningMode();
 		modEffectTask();
 		modPowerStateTask();
 		modOperationalStateTask();
+        if (!driverSWStorageManagerIsReady() || modCommandsIsCommissioningMode()) mainCommissioningMode();
 		modUARTTask();
+        if (!driverSWStorageManagerIsReady() || modCommandsIsCommissioningMode()) mainCommissioningMode();
 		modCANTask();
+        if (!driverSWStorageManagerIsReady() || modCommandsIsCommissioningMode()) mainCommissioningMode();
 		mainWatchDogReset();
 		
 		if(modPowerElectronicsTask())																						// Handle power electronics task
 			modStateOfChargeProcess();
+        if (!driverSWStorageManagerIsReady() || modCommandsIsCommissioningMode()) mainCommissioningMode();
 
     //safety_check_task(); 
     //report_status_task();																						// If there is new data handle SoC estimation

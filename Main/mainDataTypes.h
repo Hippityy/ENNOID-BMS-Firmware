@@ -111,7 +111,8 @@ typedef enum {
 	FAULT_CODE_CHARGE_RETRY,
 	FAULT_CODE_CAN_DELAYED_POWER_DOWN,
 	FAULT_CODE_NOT_USED_TIMEOUT,
-	FAULT_CODE_CHARGER_DISCONNECT
+	FAULT_CODE_CHARGER_DISCONNECT,
+	FAULT_CODE_CONFIG_INVALID
 } bms_fault_state;
 
 typedef enum {
@@ -591,7 +592,7 @@ typedef enum {
 	COMM_SET_ODOMETER,
 	
 	// ENNOID-BMS specific
-	COMM_EBMS_STORE_CONF = 150,
+	COMM_EBMS_STORE_CONF = 240,
   	COMM_EBMS_GET_CELLS,
 	COMM_EBMS_GET_AUX,
 	COMM_EBMS_GET_EXP_TEMP,
@@ -823,6 +824,12 @@ typedef enum {
 	canEmitProtocolMGElectronics,
 	canEmitProtocolVESC
 } canEmitProtocol;
+
+// Protocol enum values used by the official V6.05+ configuration wire schema.
+typedef enum { loadCANProtocolNone = 0, loadCANProtocolDieBieEngineering = 1,
+               loadCANProtocolVESC = 2 } configLoadCANProtocol;
+typedef enum { chargerCANProtocolNone = 0, chargerCANProtocolELCON = 1,
+               chargerCANProtocolDeltaQ = 2 } configChargerCANProtocol;
 
 typedef struct {
 	float   cellVoltage;

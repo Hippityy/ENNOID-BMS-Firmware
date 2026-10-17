@@ -55,6 +55,8 @@ void driverHWSwitchesDisableAll(void) {
 	for(SwitchPointer = 0; SwitchPointer < NoOfSwitches; SwitchPointer++) {
 		HAL_GPIO_WritePin(driverHWSwitchesPorts[SwitchPointer].Port,driverHWSwitchesPorts[SwitchPointer].Pin,(GPIO_PinState)SWITCH_RESET); // Set desired pin to desired state 
 	};
+	/* PC13 is open drain: pulling low indicates a healthy controller. */
+	driverHWSwitchesSetSwitchState(SWITCH_SAFETY_OUTPUT, SWITCH_SET);
 };
 
 

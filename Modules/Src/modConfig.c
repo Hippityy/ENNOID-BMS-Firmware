@@ -19,6 +19,12 @@
  */
 
 #include "modConfig.h"
+#include "modCellMap.h"
+#include "modConfigWireFields.h"
+#include "driverSWStorageManager.h"
+#include <string.h>
+#include <stddef.h>
+#include <math.h>
 
 modConfigGeneralConfigStructTypedef modConfigGeneralConfig;
 
@@ -28,85 +34,72 @@ modConfigGeneralConfigStructTypedef* modConfigInit(void) {
 };
 
 bool modConfigStoreAndLoadDefaultConfig(void) {
-	bool returnVal = false;
-	if(driverSWStorageManagerConfigEmpty) {
-		returnVal = modConfigStoreDefaultConfig();
-	}
-	
-	modConfigLoadConfig();
-	return returnVal;
-};
-
-bool modConfigStoreConfig(void) {
-	return driverSWStorageManagerStoreStruct(&modConfigGeneralConfig,STORAGE_CONFIG);
-	// TODO_EEPROM
-};
-
-bool modConfigLoadConfig(void) {
-	return driverSWStorageManagerGetStruct(&modConfigGeneralConfig,STORAGE_CONFIG);
-};
-
-bool modConfigStoreDefaultConfig(void) {
-	// VALUES WILL ONLY AUTIMATICALLY UPDATE AFTER FLASH ERASE!
-	modConfigGeneralConfigStructTypedef defaultConfig;
-  modConfigLoadDefaultConfig(&defaultConfig);
-	
-	driverSWStorageManagerConfigEmpty = false;
-	return driverSWStorageManagerStoreStruct(&defaultConfig,STORAGE_CONFIG);
+    // Unknown/empty flash requires explicit commissioning, not silent defaults.
+    return modConfigLoadConfig();
 }
 
-void modconfigHardwareLimitsApply(modConfigGeneralConfigStructTypedef *configLocation) {
-	configLocation->maxSimultaneousDischargingCells = MIN(configLocation->maxSimultaneousDischargingCells,HW_LIM_CELL_BALANCE_MAX_SIMULTANEOUS_DISCHARGE);
-	configLocation->cellMonitorICCount              = MIN(configLocation->cellMonitorICCount             ,HW_LIM_CELL_MONITOR_IC_COUNT);
-	configLocation->lastICMask 											= 0;
-	
-	if(configLocation->notUsedTimeout)
-		configLocation->notUsedTimeout                = MAX(configLocation->notUsedTimeout                 ,HW_LIM_MIN_NOT_USED_DELAY);
-	
-// Check for feasable parameters
-	if((configLocation->cellMonitorICCount % configLocation->noOfParallelModules) == 0){ // Check if feasable configuration
-			if(configLocation->noOfCellsSeries % (configLocation->cellMonitorICCount / configLocation->noOfParallelModules) == 0){
-				configLocation->noOfCellsPerModule = configLocation->noOfCellsSeries/(configLocation->cellMonitorICCount / configLocation->noOfParallelModules);
-				if(configLocation->lastICNoOfCells == 0 || configLocation->lastICNoOfCells > configLocation->noOfCellsPerModule){
-					configLocation->lastICNoOfCells = configLocation->noOfCellsPerModule;
-				}
-				
-				for(int bitPointer = 0; bitPointer < configLocation->lastICNoOfCells ; bitPointer++){
-					configLocation->lastICMask = (configLocation->lastICMask << 1)| 1 ; // This contains the last cells mask 
-				}
-			}else{ //Odd number of cells in series
-				configLocation->noOfCellsPerModule = (configLocation->noOfCellsSeries / (configLocation->cellMonitorICCount / configLocation->noOfParallelModules))+1;
-				
-				if(configLocation->lastICNoOfCells == 0 || configLocation->lastICNoOfCells > configLocation->noOfCellsPerModule){
-					configLocation->lastICNoOfCells = configLocation->noOfCellsSeries % configLocation->noOfCellsPerModule; // This contains the last cells number monitored by the last serie IC 
-				}
-				
-				for(int bitPointer = 0; bitPointer < configLocation->lastICNoOfCells ; bitPointer++){
-					configLocation->lastICMask = (configLocation->lastICMask << 1)| 1 ; // This contains the last cells mask  
-				}	
-			};			
-		}else{
-			configLocation->noOfCellsSeries    = 12;
-			configLocation->cellMonitorICCount = 1;
-			configLocation->noOfCellsPerModule = 1;
-			configLocation->lastICNoOfCells = 0;
-			configLocation->lastICMask = 0;
-		};
-		
-		if (configLocation->noOfCellsPerModule <= 3){
-			configLocation->noOfCellsSeries    = 12;
-			configLocation->cellMonitorICCount = 1;
-			configLocation->noOfCellsPerModule = 1;
-			configLocation->lastICNoOfCells = 0;
-			configLocation->lastICMask = 0;
-		}
+bool modConfigStoreConfig(void) {
+    modConfigGeneralConfigStructTypedef next = modConfigGeneralConfig;
+    if (!modConfigValidate(&next)) return false;
+    modConfigSyncLegacyCAN(&next);
+    if (!driverSWStorageManagerStoreStruct(&next, STORAGE_CONFIG)) return false;
+    modConfigPublish(&modConfigGeneralConfig, &next);
+    return true;
+}
 
-		if (configLocation->firstICNoCells == 0 || configLocation->firstICNoCells > configLocation->noOfCellsPerModule) {
-			configLocation->firstICNoCells = configLocation->noOfCellsPerModule;
-		}
+bool modConfigStoreCandidate(const modConfigGeneralConfigStructTypedef *candidate) {
+    if (!candidate) return false;
+    modConfigGeneralConfigStructTypedef next = *candidate;
+    if (!modConfigValidate(&next)) return false;
+    modConfigSyncLegacyCAN(&next);
+    /* Persist for reboot without reconfiguring the running measurement chain. */
+    return driverSWStorageManagerStoreStruct(&next, STORAGE_CONFIG);
+}
+
+bool modConfigLoadConfig(void) {
+    modConfigGeneralConfigStructTypedef next;
+    memset(&next, 0, sizeof(next));
+    if (!driverSWStorageManagerGetStruct(&next, STORAGE_CONFIG) ||
+        !modConfigValidate(&next)) return false;
+    modConfigSyncLegacyCAN(&next);
+    modConfigPublish(&modConfigGeneralConfig, &next);
+    return true;
+}
+
+bool modConfigStoreDefaultConfig(void) {
+    modConfigGeneralConfigStructTypedef defaults;
+    modConfigLoadDefaultConfig(&defaults);
+    if (!modConfigValidate(&defaults)) return false;
+    if (!driverSWStorageManagerStoreStruct(&defaults, STORAGE_CONFIG)) return false;
+    driverSWStorageManagerConfigEmpty = false;
+    return true;
+}
+
+bool modconfigHardwareLimitsApply(modConfigGeneralConfigStructTypedef *configLocation) {
+    modCellMap map;
+    if (!configLocation || configLocation->cellMonitorICCount > HW_LIM_CELL_MONITOR_IC_COUNT ||
+        !modCellMapBuild(&map, configLocation->noOfCellsSeries,
+                         configLocation->noOfParallelModules,
+                         configLocation->cellMonitorICCount,
+                         configLocation->cellMonitorType,
+                         configLocation->firstICNoCells,
+                         configLocation->lastICNoOfCells)) return false;
+
+    configLocation->maxSimultaneousDischargingCells = MIN(configLocation->maxSimultaneousDischargingCells,
+                                                          HW_LIM_CELL_BALANCE_MAX_SIMULTANEOUS_DISCHARGE);
+    if (configLocation->notUsedTimeout)
+        configLocation->notUsedTimeout = MAX(configLocation->notUsedTimeout, HW_LIM_MIN_NOT_USED_DELAY);
+    configLocation->noOfCellsPerModule = 0;
+    for (uint8_t ic = 0; ic < map.icCount; ic++)
+        configLocation->noOfCellsPerModule = MAX(configLocation->noOfCellsPerModule, map.cellsPerIC[ic]);
+    configLocation->firstICNoCells = map.cellsPerIC[0];
+    configLocation->lastICNoOfCells = map.cellsPerIC[map.icsPerString - 1];
+    configLocation->lastICMask = (1UL << configLocation->lastICNoOfCells) - 1;
+    return true;
 }
 
 void modConfigLoadDefaultConfig(modConfigGeneralConfigStructTypedef *configLocation) {
+    memset(configLocation, 0, sizeof(*configLocation));
 #if ENNOID_LV
 	configLocation->noOfCellsSeries					= 12;					// Total number of cells in series in the battery pack
 	configLocation->noOfCellsParallel                              	= 10;       				// Number of cells in parallel
@@ -917,5 +910,144 @@ void modConfigLoadDefaultConfig(modConfigGeneralConfigStructTypedef *configLocat
 	
 #endif
 
+    // Existing board presets keep conservative output behavior: CAN status off.
+    configLocation->maxAllowedChargeCurrent = configLocation->maxAllowedCurrent;
+    configLocation->loadCANProtocol = loadCANProtocolNone;
+    configLocation->chargerCANProtocol = chargerCANProtocolNone;
+    modConfigSyncLegacyCAN(configLocation);
+
 }
 
+
+void modConfigSyncLegacyCAN(modConfigGeneralConfigStructTypedef *config) {
+    config->emitStatusOverCAN = config->loadCANProtocol != loadCANProtocolNone;
+    config->emitStatusProtocol = config->loadCANProtocol == loadCANProtocolVESC ?
+        canEmitProtocolVESC : config->loadCANProtocol;
+}
+
+bool modConfigValidate(modConfigGeneralConfigStructTypedef *c) {
+    if (!c) return false;
+    // Checking every serialized float also catches overflow in float32_auto decoding.
+#define FINITE_F32(member) if (!isfinite(c->member)) return false
+#define FINITE_U8(member)
+#define FINITE_BOOL(member)
+#define FINITE_U16(member)
+#define FINITE_I16(member)
+#define FINITE_U32(member)
+#define FINITE(kind, member, wire_name) FINITE_##kind(member);
+    MOD_CONFIG_WIRE_FIELDS(FINITE)
+#undef FINITE
+    if (c->noOfCellsParallel == 0 || c->batteryCapacity <= 0.0f ||
+        c->maxAllowedCurrent <= 0.0f || c->maxAllowedChargeCurrent <= 0.0f ||
+        c->cellHardUnderVoltage <= 0.0f || c->cellHardOverVoltage > 10.0f ||
+        c->cellHardUnderVoltage >= c->cellHardOverVoltage ||
+        c->cellLCSoftUnderVoltage < c->cellHardUnderVoltage ||
+        c->cellSoftOverVoltage > c->cellHardOverVoltage ||
+        c->cellLCSoftUnderVoltage >= c->cellSoftOverVoltage ||
+        c->cellBalanceStart <= 0.0f || c->cellBalanceStart > c->cellHardOverVoltage ||
+        c->cellBalanceDifferenceThreshold < 0.0f ||
+        c->cellThrottleUpperStart < 0.0f || c->cellThrottleLowerStart < 0.0f ||
+        c->cellThrottleUpperMargin < 0.0f || c->cellThrottleLowerMargin < 0.0f ||
+        c->shuntLCFactor == 0.0f || c->voltageLCFactor <= 0.0f ||
+        c->loadVoltageFactor <= 0.0f || c->chargerVoltageFactor <= 0.0f ||
+        c->hysteresisCharge < 0.0f || c->hysteresisDischarge < 0.0f ||
+        c->maxMismatchThreshold < 0.0f || c->chargerEnabledThreshold < 0.0f ||
+        c->minimalPrechargePercentage <= 0.0f || c->minimalPrechargePercentage > 1.0f ||
+        c->notUsedCurrentThreshold < 0.0f || c->cellBalanceUpdateInterval == 0 ||
+        c->stateOfChargeStoreInterval == 0) return false;
+
+    if (c->loadCANProtocol > loadCANProtocolVESC ||
+        (c->chargerCANProtocol != chargerCANProtocolNone &&
+         c->chargerCANProtocol != chargerCANProtocolDeltaQ) ||
+        c->CANIDStyle > CANIDStyleFoiler || c->canBusSpeed > canSpeedBaud500k ||
+        (c->packVoltageDataSource != sourcePackVoltageISL28022 &&
+         c->packVoltageDataSource != sourcePackVoltageSumOfIndividualCellVoltages) ||
+        c->packCurrentDataSource != sourcePackCurrentISL28022 ||
+        c->buzzerSignalSource > buzzerSourceSOA || c->displayStyle > 3 ||
+        c->humidityICType > htc1080 || c->cellTypeUsed != 0 ||
+        c->stateOfChargeMethod != socCoulomb ||
+        c->externalEnableOperationalState > opStateExtNormal ||
+        c->chargeEnableOperationalState > opStateChargingModeNormal ||
+        c->BMSApplication > energyStorage) return false;
+
+#define CHECK_BOOL(member) if (c->member > 1) return false
+    CHECK_BOOL(buzzerSignalPersistant); CHECK_BOOL(allowChargingDuringDischarge);
+    CHECK_BOOL(allowForceOn); CHECK_BOOL(pulseToggleButton);
+    CHECK_BOOL(useCANSafetyInput); CHECK_BOOL(useCANDelayedPowerDown);
+    if (c->LCUseDischarge > forced || c->LCUsePrecharge > forced) return false;
+#undef CHECK_BOOL
+
+    const float temps[] = { c->allowedTempBattDischargingMax, c->allowedTempBattDischargingMin,
+        c->allowedTempBattChargingMax, c->allowedTempBattChargingMin,
+        c->allowedTempBattCoolingMax, c->allowedTempBattCoolingMin,
+        c->allowedTempBMSMax, c->allowedTempBMSMin };
+    for (unsigned i = 0; i < sizeof(temps)/sizeof(temps[0]); ++i)
+        if (temps[i] < -100.0f || temps[i] > 200.0f) return false;
+    if (c->allowedTempBattDischargingMin >= c->allowedTempBattDischargingMax ||
+        c->allowedTempBattChargingMin >= c->allowedTempBattChargingMax ||
+        c->allowedTempBMSMin >= c->allowedTempBMSMax) return false;
+    // Fixed sensor storage and per-monitor GPIO/reference channel limits.
+    unsigned auxCapacity = c->cellMonitorType == CELL_MON_LTC6811_1 ? 5U : 9U;
+    if ((c->tempEnableMaskBMS & ~0x3FFFUL) != 0 ||
+        c->noOfTempSensorPerModule > auxCapacity ||
+        c->noOfExpansionBoard > 9 || c->noOfTempSensorPerExpansionBoard > 8 ||
+        (unsigned)c->noOfExpansionBoard * c->noOfTempSensorPerExpansionBoard > 72)
+        return false;
+    for (unsigned i = modConfigNTCGroupLTCExt; i <= modConfigNTCGroupExp; ++i)
+        if (!c->NTCTopResistor[i] || !c->NTC25DegResistance[i] || !c->NTCBetaFactor[i])
+            return false;
+    return modconfigHardwareLimitsApply(c);
+}
+
+// Migration offsets are intentionally tied to the two audited ARM ABI layouts.
+_Static_assert(offsetof(modConfigGeneralConfigStructTypedef, humidityICType) == 310,
+               "legacy config prefix changed; update explicit migration");
+_Static_assert(offsetof(modConfigGeneralConfigStructTypedef, BMSApplication) == 313,
+               "legacy316 tail changed; update explicit migration");
+_Static_assert(offsetof(modConfigGeneralConfigStructTypedef, maxAllowedChargeCurrent) == 316,
+               "new fields must remain appended after legacy316");
+
+bool modConfigMigrateLegacy(void *dest, const uint8_t *raw, uint16_t rawBytes) {
+    if (!dest || !raw || (rawBytes != 312 && rawBytes != 316)) return false;
+    // Both known layouts have their sole C bool at byte32; reject invalid representation.
+    if (raw[offsetof(modConfigGeneralConfigStructTypedef, cellBalanceAllTime)] > 1)
+        return false;
+    modConfigGeneralConfigStructTypedef next;
+    memset(&next, 0, sizeof(next));
+    memcpy(&next, raw, rawBytes);
+    if (rawBytes == 312) {
+        next.BMSApplication = raw[311];
+        next.cellTypeUsed = 0;
+        next.firstICNoCells = 0;
+    }
+    if (next.emitStatusOverCAN > 1 || next.emitStatusProtocol > canEmitProtocolVESC)
+        return false;
+    if (!next.emitStatusOverCAN || next.emitStatusProtocol == canEmitProtocolNone)
+        next.loadCANProtocol = loadCANProtocolNone;
+    else if (next.emitStatusProtocol == canEmitProtocolVESC)
+        next.loadCANProtocol = loadCANProtocolVESC;
+    else if (next.emitStatusProtocol == canEmitProtocolDieBieEngineering)
+        next.loadCANProtocol = loadCANProtocolDieBieEngineering;
+    else return false; // No implemented MG protocol to migrate safely.
+    next.chargerCANProtocol = chargerCANProtocolNone;
+    // Old firmware used the one magnitude limit for charge and discharge.
+    next.maxAllowedChargeCurrent = next.maxAllowedCurrent;
+    if (!modConfigValidate(&next)) return false;
+    modConfigSyncLegacyCAN(&next);
+    *(modConfigGeneralConfigStructTypedef *)dest = next;
+    return true;
+}
+
+void modConfigPublish(modConfigGeneralConfigStructTypedef *dest,
+                      const modConfigGeneralConfigStructTypedef *src) {
+#if defined(__arm__) || defined(__thumb__)
+    // RX IRQs can consult configuration; do not expose a partly copied struct.
+    uint32_t mask;
+    __asm volatile ("mrs %0, primask" : "=r" (mask));
+    __asm volatile ("cpsid i" ::: "memory");
+    *dest = *src;
+    __asm volatile ("msr primask, %0" :: "r" (mask) : "memory");
+#else
+    *dest = *src;
+#endif
+}

@@ -1,3 +1,5 @@
+See the [HV-2 development notes](Notes/Firmware_Port_Fixes.md) for port changes, commissioning and migration instructions, testing, and remaining limitations.
+
 # Other parts of this project
 
 This is the firmware repository containing all firmware source files. There are three more repositories for this project:

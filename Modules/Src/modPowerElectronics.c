@@ -20,6 +20,8 @@
 
 #include "modPowerElectronics.h"
 #include "modTerminal.h"
+#include "modCellMap.h"
+#include <string.h>
 
 modPowerElectronicsPackStateTypedef *modPowerElectronicsPackStateHandle;
 modConfigGeneralConfigStructTypedef *modPowerElectronicsGeneralConfigHandle;
@@ -61,6 +63,56 @@ float currentOffset = 0.0f;
 uint8_t currentOffsetCounter = 0;
 
 //uint32_t hardUnderVoltageFlags, hardOverVoltageFlags;
+
+static modCellMap modPowerElectronicsActiveCellMap;
+static bool modPowerElectronicsActiveCellMapValid;
+
+void modPowerElectronicsEmergencyStop(void) {
+    /* Switches open before any SPI work. Safe to call before PE initialization. */
+    driverHWSwitchesDisableAll();
+    modPowerElectronicsAllowForcedOnState = false;
+    if (!modPowerElectronicsPackStateHandle) return;
+    modPowerElectronicsPackStateTypedef *p = modPowerElectronicsPackStateHandle;
+    p->chargeAllowed = p->disChargeLCAllowed = false;
+    p->chargeDesired = p->disChargeDesired = p->preChargeDesired = false;
+    p->chargePFETDesired = p->balanceActive = p->chargeBalanceActive = false;
+    p->packInSOACharge = p->packInSOADischarge = false;
+    p->powerDownDesired = true;
+    p->throttleDutyCharge = 0; /* Commissioning CAN must request zero charger current. */
+    memset(p->cellModuleBalanceResistorEnableMask, 0, sizeof(p->cellModuleBalanceResistorEnableMask));
+    for (unsigned i = 0; i < NoOfCellsPossibleOnBMS; i++) p->cellVoltagesIndividual[i].cellBleedActive = false;
+    if (modPowerElectronicsActiveCellMapValid) {
+        /* Use the initialized driver/count/type, never a newly edited config. */
+        driverSWLTC6804EnableBalanceResistorsArray(p->cellModuleBalanceResistorEnableMask,
+                                                  modPowerElectronicsCellMonitorsTypeActive);
+    }
+}
+
+static void modPowerElectronicsInvalidCellLayout(void) {
+    modPowerElectronicsPackStateHandle->faultState = FAULT_CODE_CONFIG_INVALID;
+    modPowerElectronicsPackStateHandle->packOperationalCellState = PACK_STATE_ERROR_HARD_CELLVOLTAGE;
+    modPowerElectronicsPackStateHandle->disChargeLCAllowed = false;
+    modPowerElectronicsPackStateHandle->chargeAllowed = false;
+    modPowerElectronicsPackStateHandle->packInSOACharge = false;
+    modPowerElectronicsPackStateHandle->packInSOADischarge = false;
+    modPowerElectronicsPackStateHandle->preChargeDesired = false;
+    modPowerElectronicsPackStateHandle->disChargeDesired = false;
+    modPowerElectronicsPackStateHandle->chargeDesired = false;
+    modPowerElectronicsPackStateHandle->chargePFETDesired = false;
+    modPowerElectronicsAllowForcedOnState = false;
+    driverHWSwitchesDisableAll();
+}
+
+static bool modPowerElectronicsBuildCellMap(modCellMap *map) {
+    if (modCellMapBuild(map, modPowerElectronicsGeneralConfigHandle->noOfCellsSeries,
+                        modPowerElectronicsGeneralConfigHandle->noOfParallelModules,
+                        modPowerElectronicsGeneralConfigHandle->cellMonitorICCount,
+                        modPowerElectronicsGeneralConfigHandle->cellMonitorType,
+                        modPowerElectronicsGeneralConfigHandle->firstICNoCells,
+                        modPowerElectronicsGeneralConfigHandle->lastICNoOfCells)) return true;
+    modPowerElectronicsInvalidCellLayout();
+    return false;
+}
 
 void modPowerElectronicsInit(modPowerElectronicsPackStateTypedef *packState, modConfigGeneralConfigStructTypedef *generalConfigPointer) {
 	modPowerElectronicsGeneralConfigHandle						= generalConfigPointer;
@@ -127,6 +179,10 @@ void modPowerElectronicsInit(modPowerElectronicsPackStateTypedef *packState, mod
 	modPowerElectronicsPackStateHandle->powerDownDesired				= false;
 	modPowerElectronicsPackStateHandle->powerOnLongButtonPress			= false;
 	
+	modCellMap initialMap;
+	modPowerElectronicsActiveCellMapValid = false;
+	if (!modPowerElectronicsBuildCellMap(&initialMap)) return;
+
 	// init the cell module variables empty
 	for( uint8_t modulePointer = 0; modulePointer < NoOfCellMonitorsPossibleOnBMS; modulePointer++) {
 		for(uint8_t cellPointer = 0; cellPointer < modPowerElectronicsGeneralConfigHandle->noOfCellsPerModule; cellPointer++)
@@ -180,6 +236,12 @@ void modPowerElectronicsInit(modPowerElectronicsPackStateTypedef *packState, mod
 };
 
 bool modPowerElectronicsTask(void) {
+    modCellMap runtimeMap;
+    if (!modPowerElectronicsBuildCellMap(&runtimeMap)) return false;
+	if (modPowerElectronicsPackStateHandle->faultState == FAULT_CODE_CONFIG_INVALID) {
+		modPowerElectronicsInvalidCellLayout();
+		return false;
+	}
 	bool returnValue = false;
 	// Static variable for SHT measure timer
 
@@ -423,27 +485,19 @@ void modPowerElectronicsSubTaskBalancing(void) {
 };
 
 void modPowerElectronicsCallMonitorsCalcBalanceResistorArray(void) {
-	uint8_t modulePointer = 0;
-	uint8_t cellInMaskPointer = 0;
-	uint8_t seriesCount = 0;
-	uint8_t moduleCount = 0;
-	
-	// Clear array
-	for(uint8_t moduleClearPointer = 0; moduleClearPointer < NoOfCellMonitorsPossibleOnBMS; moduleClearPointer++)
-		modPowerElectronicsPackStateHandle->cellModuleBalanceResistorEnableMask[moduleClearPointer] = 0;
-	
-	
-	for(uint8_t cellPointer = 0; cellPointer < modPowerElectronicsGeneralConfigHandle->noOfCellsSeries*modPowerElectronicsGeneralConfigHandle->noOfParallelModules; cellPointer++) {
-		seriesCount = cellPointer/modPowerElectronicsGeneralConfigHandle->noOfCellsSeries; 
-		moduleCount = seriesCount*(modPowerElectronicsGeneralConfigHandle->cellMonitorICCount/modPowerElectronicsGeneralConfigHandle->noOfParallelModules);
-		modulePointer = moduleCount + (cellPointer % modPowerElectronicsGeneralConfigHandle->noOfCellsSeries)/modPowerElectronicsGeneralConfigHandle->noOfCellsPerModule;
-		cellInMaskPointer = (cellPointer - (seriesCount*modPowerElectronicsGeneralConfigHandle->noOfCellsSeries)) % modPowerElectronicsGeneralConfigHandle->noOfCellsPerModule;
-		
-		if(modPowerElectronicsPackStateHandle->cellVoltagesIndividual[cellPointer].cellBleedActive)
-		  modPowerElectronicsPackStateHandle->cellModuleBalanceResistorEnableMask[modulePointer] |= (1 << cellInMaskPointer);
-		else
-			modPowerElectronicsPackStateHandle->cellModuleBalanceResistorEnableMask[modulePointer] &= ~(1 << cellInMaskPointer);
-	}
+    modCellMap map;
+    memset(modPowerElectronicsPackStateHandle->cellModuleBalanceResistorEnableMask, 0,
+           sizeof(modPowerElectronicsPackStateHandle->cellModuleBalanceResistorEnableMask));
+    if (!modPowerElectronicsBuildCellMap(&map)) return;
+    for (uint16_t logical = 0; logical < map.totalCells; logical++) {
+        uint8_t ic, channel;
+        if (!modCellMapPhysical(&map, logical, &ic, &channel)) {
+            modPowerElectronicsInvalidCellLayout();
+            return;
+        }
+        if (modPowerElectronicsPackStateHandle->cellVoltagesIndividual[logical].cellBleedActive)
+            modPowerElectronicsPackStateHandle->cellModuleBalanceResistorEnableMask[ic] |= 1UL << channel;
+    }
 }
 
 void modPowerElectronicsSubTaskVoltageWatch(void) {
@@ -452,6 +506,10 @@ void modPowerElectronicsSubTaskVoltageWatch(void) {
 	
 	//modPowerElectronicsCellMonitorsReadVoltageFlags(&hardUnderVoltageFlags,&hardOverVoltageFlags);
 	modPowerElectronicsCalculateCellStats();
+    if (modPowerElectronicsPackStateHandle->packOperationalCellState == PACK_STATE_ERROR_OVER_CURRENT) {
+        modPowerElectronicsUpdateSwitches();
+        return;
+    }
 	
 	if(modPowerElectronicsPackStateHandle->packOperationalCellState != PACK_STATE_ERROR_HARD_CELLVOLTAGE && modPowerElectronicsPackStateHandle->packOperationalCellState != PACK_STATE_ERROR_TEMPERATURE) {
 		
@@ -547,17 +605,28 @@ void modPowerElectronicsSubTaskVoltageWatch(void) {
 	}
 };
 
-void 	modPowerElectronicsSubTaskCurrentWatch(void){
-		// Handle over current limits 
-	if(modPowerElectronicsPackStateHandle->packCurrent > modPowerElectronicsGeneralConfigHandle->maxAllowedCurrent){
-			modPowerElectronicsPackStateHandle->packOperationalCellState = PACK_STATE_ERROR_OVER_CURRENT;
-			modPowerElectronicsPackStateHandle->disChargeLCAllowed = false;
-			modPowerElectronicsPackStateHandle->chargeAllowed = false;
-	}
-};
+void modPowerElectronicsSubTaskCurrentWatch(void) {
+    /* Positive current charges the pack (the SoC integrator uses the same sign). */
+    float current = modPowerElectronicsPackStateHandle->packCurrent;
+    if (!isfinite(current) || current > modPowerElectronicsGeneralConfigHandle->maxAllowedChargeCurrent ||
+        -current > modPowerElectronicsGeneralConfigHandle->maxAllowedCurrent) {
+        modPowerElectronicsPackStateHandle->packOperationalCellState = PACK_STATE_ERROR_OVER_CURRENT;
+        modPowerElectronicsPackStateHandle->faultState = FAULT_CODE_OVER_CURRENT;
+        modPowerElectronicsPackStateHandle->disChargeLCAllowed = false;
+        modPowerElectronicsPackStateHandle->chargeAllowed = false;
+        modPowerElectronicsAllowForcedOnState = false;
+        modPowerElectronicsUpdateSwitches();
+    }
+}
 
 // Update switch states, should be called after every desired/allowed switch state change
 void modPowerElectronicsUpdateSwitches(void) {
+    /* Hard faults cannot be bypassed by the forced-on path. */
+    if (modPowerElectronicsPackStateHandle->faultState == FAULT_CODE_CONFIG_INVALID ||
+        modPowerElectronicsPackStateHandle->packOperationalCellState == PACK_STATE_ERROR_OVER_CURRENT) {
+        driverHWSwitchesDisableAll();
+        return;
+    }
 	// Do the actual power switching in here
 	
 	//Handle precharge output
@@ -644,13 +713,13 @@ void modPowerElectronicsCalcTempStats(void) {
 	
 	// BMS temperatures
 	
-	for(uint8_t sensorPointer = 1; sensorPointer < 16; sensorPointer++){
+	for(uint8_t sensorPointer = 1; sensorPointer < NoOfTempSensors; sensorPointer++){
 		if(modPowerElectronicsGeneralConfigHandle->tempEnableMaskBMS & (1 << sensorPointer)){
 			modPowerElectronicsPackStateHandle->temperatures[sensorPointer] = modPowerElectronicsPackStateHandle->auxVoltagesIndividual[sensorPointer-1].auxVoltage;
 		}
 	}
 	
-	for(uint8_t sensorPointer = 0; sensorPointer < 16; sensorPointer++){
+	for(uint8_t sensorPointer = 0; sensorPointer < NoOfTempSensors; sensorPointer++){
 	
 		if(modPowerElectronicsGeneralConfigHandle->tempEnableMaskBMS & (1 << sensorPointer)){
 			if(modPowerElectronicsPackStateHandle->temperatures[sensorPointer] > tempBMSMax)
@@ -668,14 +737,15 @@ void modPowerElectronicsCalcTempStats(void) {
 	
 	for(uint8_t sensorModulePointer = 0; sensorModulePointer < modPowerElectronicsGeneralConfigHandle->cellMonitorICCount; sensorModulePointer++) {
 		for(uint8_t sensorPointer = 0; sensorPointer < modPowerElectronicsGeneralConfigHandle->noOfTempSensorPerModule; sensorPointer++) {
-			if(modPowerElectronicsGeneralConfigHandle->tempEnableMaskBattery & (1 << sensorPointer)){
-				if(modPowerElectronicsPackStateHandle->auxVoltagesIndividual[sensorPointer].auxVoltage > tempBatteryMax)
-					tempBatteryMax = modPowerElectronicsPackStateHandle->auxVoltagesIndividual[sensorPointer].auxVoltage;
+			if(modPowerElectronicsGeneralConfigHandle->tempEnableMaskBattery & (1UL << sensorPointer)){
+                uint16_t reading = sensorModulePointer * modPowerElectronicsGeneralConfigHandle->noOfTempSensorPerModule + sensorPointer;
+				if(modPowerElectronicsPackStateHandle->auxVoltagesIndividual[reading].auxVoltage > tempBatteryMax)
+					tempBatteryMax = modPowerElectronicsPackStateHandle->auxVoltagesIndividual[reading].auxVoltage;
 				
-				if(modPowerElectronicsPackStateHandle->auxVoltagesIndividual[sensorPointer].auxVoltage < tempBatteryMin)
-					tempBatteryMin = modPowerElectronicsPackStateHandle->auxVoltagesIndividual[sensorPointer].auxVoltage;
+				if(modPowerElectronicsPackStateHandle->auxVoltagesIndividual[reading].auxVoltage < tempBatteryMin)
+					tempBatteryMin = modPowerElectronicsPackStateHandle->auxVoltagesIndividual[reading].auxVoltage;
 				
-				tempBatterySum += modPowerElectronicsPackStateHandle->auxVoltagesIndividual[sensorPointer].auxVoltage;		
+				tempBatterySum += modPowerElectronicsPackStateHandle->auxVoltagesIndividual[reading].auxVoltage;
 				tempBatterySumCount++;
 			}
 		}
@@ -684,14 +754,15 @@ void modPowerElectronicsCalcTempStats(void) {
 	// Battery temperatures statistics for expansion board
 	for(uint8_t sensorModulePointer = 0; sensorModulePointer < modPowerElectronicsGeneralConfigHandle->noOfExpansionBoard; sensorModulePointer++) {
 		for(uint8_t sensorPointer = 0; sensorPointer < modPowerElectronicsGeneralConfigHandle->noOfTempSensorPerExpansionBoard; sensorPointer++) {
-			if(modPowerElectronicsGeneralConfigHandle->tempEnableMaskExpansion & (1 << sensorPointer)){
-				if(modPowerElectronicsPackStateHandle->expVoltagesIndividual[sensorPointer].expVoltage > tempBatteryMax)
-					tempBatteryMax = modPowerElectronicsPackStateHandle->expVoltagesIndividual[sensorPointer].expVoltage;
+			if(modPowerElectronicsGeneralConfigHandle->tempEnableMaskExpansion & (1UL << sensorPointer)){
+                uint16_t reading = sensorModulePointer * modPowerElectronicsGeneralConfigHandle->noOfTempSensorPerExpansionBoard + sensorPointer;
+				if(modPowerElectronicsPackStateHandle->expVoltagesIndividual[reading].expVoltage > tempBatteryMax)
+					tempBatteryMax = modPowerElectronicsPackStateHandle->expVoltagesIndividual[reading].expVoltage;
 			
-				if(modPowerElectronicsPackStateHandle->expVoltagesIndividual[sensorPointer].expVoltage < tempBatteryMin)
-					tempBatteryMin = modPowerElectronicsPackStateHandle->expVoltagesIndividual[sensorPointer].expVoltage;
+				if(modPowerElectronicsPackStateHandle->expVoltagesIndividual[reading].expVoltage < tempBatteryMin)
+					tempBatteryMin = modPowerElectronicsPackStateHandle->expVoltagesIndividual[reading].expVoltage;
 		
-			tempBatterySum += modPowerElectronicsPackStateHandle->expVoltagesIndividual[sensorPointer].expVoltage;
+			tempBatterySum += modPowerElectronicsPackStateHandle->expVoltagesIndividual[reading].expVoltage;
 			tempBatterySumCount++;		
 		}
 	}
@@ -939,6 +1010,8 @@ void modPowerElectronicsResetBalanceModeActiveTimeout(void) {
 }
 
 void modPowerElectronicsCellMonitorsInit(void){
+    modCellMap map;
+    if (!modPowerElectronicsBuildCellMap(&map)) return;
 
 			driverLTC6804ConfigStructTypedef configStruct;
 			configStruct.GPIO1                    = true;																														// Do not pull down this pin (false = pull down)
@@ -963,7 +1036,9 @@ void modPowerElectronicsCellMonitorsInit(void){
 			driverHWSwitchesSetSwitchState(SWITCH_SAFETY_OUTPUT,SWITCH_RESET);
 
 	
-	modPowerElectronicsCellMonitorsTypeActive = (configCellMonitorICTypeEnum)modPowerElectronicsGeneralConfigHandle->cellMonitorType;
+    modPowerElectronicsActiveCellMap = map;
+    modPowerElectronicsActiveCellMapValid = true;
+    modPowerElectronicsCellMonitorsTypeActive = (configCellMonitorICTypeEnum)modPowerElectronicsGeneralConfigHandle->cellMonitorType;
 }
 
 void modPowerElectronicsCellMonitorsCheckConfigAndReadAnalogData(void){
@@ -991,26 +1066,18 @@ void modPowerElectronicsCellMonitorsCheckConfigAndReadAnalogData(void){
 }
 
 void modPowerElectronicsCellMonitorsArrayTranslate(void) {
-	uint8_t individualCellPointer = 0;
-	
-  for(uint8_t modulePointer = 0; modulePointer < modPowerElectronicsGeneralConfigHandle->cellMonitorICCount; modulePointer++) {
-		if((modulePointer+1) % (modPowerElectronicsGeneralConfigHandle->cellMonitorICCount/modPowerElectronicsGeneralConfigHandle->noOfParallelModules)==0 && modulePointer != 0){ // If end of serie string, use lastICNoOfCells instead of noOfCellsPerModule
-			for(uint8_t modulePointerCell = 0; modulePointerCell < modPowerElectronicsGeneralConfigHandle->lastICNoOfCells; modulePointerCell++) {
-				modPowerElectronicsPackStateHandle->cellVoltagesIndividual[individualCellPointer].cellVoltage = modPowerElectronicsPackStateHandle->cellModuleVoltages[modulePointer][modulePointerCell];
-				modPowerElectronicsPackStateHandle->cellVoltagesIndividual[individualCellPointer].cellNumber = individualCellPointer++;
-			}
-		}else if(modulePointer == 0 && modPowerElectronicsGeneralConfigHandle->firstICNoCells > 0 && modPowerElectronicsGeneralConfigHandle->firstICNoCells != modPowerElectronicsGeneralConfigHandle->noOfCellsPerModule){
-			for(uint8_t modulePointerCell = 0; modulePointerCell < modPowerElectronicsGeneralConfigHandle->firstICNoCells; modulePointerCell++) {
-				modPowerElectronicsPackStateHandle->cellVoltagesIndividual[individualCellPointer].cellVoltage = modPowerElectronicsPackStateHandle->cellModuleVoltages[modulePointer][modulePointerCell];
-				modPowerElectronicsPackStateHandle->cellVoltagesIndividual[individualCellPointer].cellNumber = individualCellPointer++;
-			}
-		}else{ // use noOfCellsPerModule as usually
-			for(uint8_t modulePointerCell = 0; modulePointerCell < modPowerElectronicsGeneralConfigHandle->noOfCellsPerModule; modulePointerCell++) {
-				modPowerElectronicsPackStateHandle->cellVoltagesIndividual[individualCellPointer].cellVoltage = modPowerElectronicsPackStateHandle->cellModuleVoltages[modulePointer][modulePointerCell];
-				modPowerElectronicsPackStateHandle->cellVoltagesIndividual[individualCellPointer].cellNumber = individualCellPointer++;
-			}
-		};
-	}
+    modCellMap map;
+    if (!modPowerElectronicsBuildCellMap(&map)) return;
+    for (uint16_t logical = 0; logical < map.totalCells; logical++) {
+        uint8_t ic, channel;
+        if (!modCellMapPhysical(&map, logical, &ic, &channel)) {
+            modPowerElectronicsInvalidCellLayout();
+            return;
+        }
+        modPowerElectronicsPackStateHandle->cellVoltagesIndividual[logical].cellVoltage =
+            modPowerElectronicsPackStateHandle->cellModuleVoltages[ic][channel];
+        modPowerElectronicsPackStateHandle->cellVoltagesIndividual[logical].cellNumber = logical;
+    }
 }
 
 void modPowerElectronicsAuxMonitorsArrayTranslate(void) {
@@ -1020,10 +1087,12 @@ void modPowerElectronicsAuxMonitorsArrayTranslate(void) {
 	  for(uint8_t modulePointerAux = 0; modulePointerAux < modPowerElectronicsGeneralConfigHandle->noOfTempSensorPerModule; modulePointerAux++) {
 			if(modulePointerAux < 5){		
 				modPowerElectronicsPackStateHandle->auxVoltagesIndividual[individualAuxPointer].auxVoltage = modPowerElectronicsPackStateHandle->auxModuleVoltages[modulePointer][modulePointerAux];
-				modPowerElectronicsPackStateHandle->auxVoltagesIndividual[individualAuxPointer].auxNumber = individualAuxPointer++;
+				modPowerElectronicsPackStateHandle->auxVoltagesIndividual[individualAuxPointer].auxNumber = individualAuxPointer;
+				individualAuxPointer++;
 			}else{ // when above 5, remove reference voltage measurement from Aux register group B : AVBR4 & AVBR5 for LTC6812 & LTC6813
 				modPowerElectronicsPackStateHandle->auxVoltagesIndividual[individualAuxPointer].auxVoltage = modPowerElectronicsPackStateHandle->auxModuleVoltages[modulePointer][modulePointerAux+1];
-				modPowerElectronicsPackStateHandle->auxVoltagesIndividual[individualAuxPointer].auxNumber = individualAuxPointer++;
+				modPowerElectronicsPackStateHandle->auxVoltagesIndividual[individualAuxPointer].auxNumber = individualAuxPointer;
+				individualAuxPointer++;
 			}
 		}
 	}
@@ -1035,7 +1104,8 @@ void modPowerElectronicsExpMonitorsArrayTranslate(void) {
   for(uint8_t modulePointer = 0; modulePointer < modPowerElectronicsGeneralConfigHandle->noOfExpansionBoard; modulePointer++) {
 	  for(uint8_t modulePointerExp = 0; modulePointerExp < modPowerElectronicsGeneralConfigHandle->noOfTempSensorPerExpansionBoard; modulePointerExp++) {	
 			modPowerElectronicsPackStateHandle->expVoltagesIndividual[individualExpPointer].expVoltage = modPowerElectronicsPackStateHandle->expModuleVoltages[modulePointer][modulePointerExp];
-			modPowerElectronicsPackStateHandle->expVoltagesIndividual[individualExpPointer].expNumber = individualExpPointer++;
+			modPowerElectronicsPackStateHandle->expVoltagesIndividual[individualExpPointer].expNumber = individualExpPointer;
+			individualExpPointer++;
 		}
 	}
 }
@@ -1084,10 +1154,14 @@ void modPowerElectronicsCellMonitorsReadVoltageFlags(uint32_t *underVoltageFlags
 	driverSWLTC6804ReadVoltageFlags(underVoltageFlags,overVoltageFlags, modPowerElectronicsGeneralConfigHandle->lastICMask, modPowerElectronicsGeneralConfigHandle->noOfParallelModules, modPowerElectronicsPackStateHandle->dieTemperature);
 }
 
-void modPowerElectronicsCellMonitorsCheckAndSolveInitState(void){
-  if(modPowerElectronicsCellMonitorsTypeActive != modPowerElectronicsGeneralConfigHandle->cellMonitorType){
-		modPowerElectronicsCellMonitorsInit();
-	}
+void modPowerElectronicsCellMonitorsCheckAndSolveInitState(void) {
+    modCellMap map;
+    if (!modPowerElectronicsBuildCellMap(&map)) return;
+    if (!modPowerElectronicsActiveCellMapValid ||
+        modPowerElectronicsCellMonitorsTypeActive != modPowerElectronicsGeneralConfigHandle->cellMonitorType ||
+        memcmp(&map, &modPowerElectronicsActiveCellMap, sizeof(map))) {
+        modPowerElectronicsCellMonitorsInit();
+    }
 }
 
 void modPowerElectronicsTerminalCellConnectionTest(int argc, const char **argv) {

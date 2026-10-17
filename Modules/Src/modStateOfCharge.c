@@ -19,6 +19,7 @@
  */
  
 #include "modStateOfCharge.h"
+#include "driverSWStorageManager.h"
 
 modStateOfChargeStructTypeDef modStateOfChargeGeneralStateOfCharge;
 modPowerElectronicsPackStateTypedef *modStateOfChargePackStatehandle;
